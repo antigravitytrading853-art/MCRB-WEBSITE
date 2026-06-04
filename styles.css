@@ -3413,20 +3413,23 @@ body {
 }
 
 /* Override existing .nav-link styles inside sidebar */
+
 .sidebar .nav-link {
     display: flex;
     align-items: center;
     gap: 12px;
     color: rgba(255,255,255,0.85);
     text-decoration: none;
-    padding: 14px 16px;
-    margin-bottom: 8px;
+    padding: 10px 14px;
+    margin-bottom: 4px;
     border-radius: 12px;
     transition: .25s;
     font-weight: 500;
-    font-size: 1rem;
-    position: static; /* override header nav link */
+    font-size: 0.95rem;
+    position: static;
 }
+.nav-links { overflow-y: hidden; }
+
 
 .sidebar .nav-link::after {
     display: none; /* override header active indicator */
@@ -3471,7 +3474,7 @@ body {
 
 /* Main Content Area */
 .main-content {
-    margin-left: 320px; /* 280 sidebar + 20 left + 20 gap */
+    margin-left: 0;
     position: relative;
     z-index: 10;
     min-height: 100vh;
@@ -3519,7 +3522,7 @@ body {
     color: #f1f5f9;
 }
 
-.page-content { padding: 0 0 40px 0; }
+.page-content { padding: 0 0 40px 320px; }
 
 .mobile-only-btn {
     display: none;
@@ -3584,5 +3587,20 @@ body {
     }
     .page-content {
         padding: 0 10px 40px 10px;
+    }
+}
+
+/* Full Bleed Hero for Blur Effect */
+@media (min-width: 993px) {
+    .hero-section {
+        margin-left: -320px !important;
+        width: 100vw !important;
+        padding-left: 320px !important;
+        box-sizing: border-box !important;
+    }
+}
+@media (max-width: 992px) {
+    .page-content {
+        padding-left: 0 !important;
     }
 }
