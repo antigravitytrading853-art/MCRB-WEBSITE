@@ -3604,3 +3604,10 @@ body {
         padding-left: 0 !important;
     }
 }
+
+/* Override SPA behavior to Single Page Scrolling */
+.tab-content {
+    display: block !important;
+    opacity: 1 !important;
+    margin-bottom: 60px; /* add some spacing between sections */
+}

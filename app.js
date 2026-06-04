@@ -115,17 +115,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // Toggle Content Views
-    views.forEach(view => {
-      if (view.id === `${targetViewId}-view`) {
-        view.classList.add('active');
-      } else {
-        view.classList.remove('active');
-      }
-    });
-
-    // Scroll to Top
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Scroll to target section instead of hiding others
+    const targetSection = document.getElementById(`${targetViewId}-view`);
+    if (targetSection) {
+      targetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 
     // Handle view-specific initializations
     if (targetViewId === 'home') {
