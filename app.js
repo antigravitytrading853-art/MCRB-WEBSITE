@@ -72,9 +72,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const themeToggleBtn = document.getElementById('theme-toggle-btn');
   updateThemeIcon();
   const navLinks = document.querySelectorAll('.nav-link');
-  const mobileToggle = document.getElementById('mobile-toggle');
-  const navMenu = document.getElementById('nav-menu');
-  const header = document.querySelector('header');
+  const mobileToggle = document.getElementById('mobile-toggle'); // DEPRECATED
+  const navMenu = document.getElementById('nav-menu'); // DEPRECATED
+  const header = document.querySelector('header'); // DEPRECATED
   const views = document.querySelectorAll('.tab-content');
   const quickPortalBtn = document.getElementById('quick-portal-btn');
   const heroPortalBtn = document.getElementById('hero-portal-btn');
@@ -83,14 +83,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- SCROLL EFFECTS ---
   window.addEventListener('scroll', () => {
     if (window.scrollY > 20) {
-      header.classList.add('scrolled');
+      if(header) header.classList.add('scrolled');
     } else {
-      header.classList.remove('scrolled');
+      if(header) header.classList.remove('scrolled');
     }
   });
 
   // --- MOBILE NAVIGATION ---
-  mobileToggle.addEventListener('click', () => {
+  if(mobileToggle) mobileToggle.addEventListener('click', () => {
     navMenu.classList.toggle('active');
     const isExpanded = navMenu.classList.contains('active');
     mobileToggle.innerHTML = isExpanded ? '✕' : '☰';
@@ -99,8 +99,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Close mobile menu on nav link click
   navLinks.forEach(link => {
     link.addEventListener('click', () => {
-      navMenu.classList.remove('active');
-      mobileToggle.innerHTML = '☰';
+      if(navMenu) navMenu.classList.remove('active');
+      if(mobileToggle) mobileToggle.innerHTML = '☰';
     });
   });
 

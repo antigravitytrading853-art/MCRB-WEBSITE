@@ -19,7 +19,7 @@
   <!-- Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
   <!-- Stylesheets -->
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="stylesheet" href="styles.css?v=8">
   <link rel="icon" type="image/jpeg" href="assets/MCRB LOGO.jpg">
   
   <!-- Lucide Icons CDN -->
@@ -28,9 +28,12 @@
 <body>
   <div class="sidebar" id="sidebar">
     <div class="logo-section" style="display:flex; align-items:center; justify-content:space-between;">
-        <div style="display:flex; align-items:center; gap: 12px;">
-            <img src="assets/MCRB LOGO.jpg" alt="MCRB Logo" style="width: 50px; height: auto;">
-            <h2 style="font-family: 'Cinzel', serif; font-weight: 600; letter-spacing: 1px; font-size: 1.15rem;">MERU COUNTY<br>REVENUE BOARD</h2>
+        <div class="logo" style="display:flex; align-items:center; gap: 12px;">
+            <img src="assets/MCRB LOGO.jpg" alt="Meru County Revenue Board Logo" id="nav-logo" style="width: 45px; height: auto; border-radius: 4px;">
+            <div class="logo-text">
+                <span class="logo-title" style="color: white;">MERU COUNTY</span>
+                <span class="logo-subtitle" style="color: rgba(255,255,255,0.9);">REVENUE BOARD</span>
+            </div>
         </div>
         <button id="sidebar-close" class="mobile-only-btn" aria-label="Close Menu">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -135,14 +138,11 @@
         <h1 class="hero-title">Secure & Automated <span>Revenue Services</span> for Meru County</h1>
         <p class="hero-desc">Experience faster processing, transparent fees, and convenient mobile payments. Access your single business permit, pay land rates, and track parking charges online.</p>
         <div class="hero-buttons">
-          <button class="btn btn-portal" id="quick-portal-btn" style="background: var(--accent); color: white; border: none; padding: 14px 28px; border-radius: var(--radius-md); font-weight: 600; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;">
+          <button class="btn btn-portal" id="quick-portal-btn" style="background: var(--primary); color: white; border: none; padding: 14px 28px; border-radius: var(--radius-md); font-weight: 600; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-credit-card"><rect width="20" height="14" rx="2" ry="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
             Pay Bill
           </button>
-          <button class="btn btn-outline" id="hero-calc-btn">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-calculator"><rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/></svg>
-            Estimate Permit Fees
-          </button>
+          
         </div>
       </div>
     </div>
@@ -1550,6 +1550,6 @@
       </div>
 </div>
 <!-- Main Script -->
-  <script src="app.js?v=7"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>
