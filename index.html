@@ -16,10 +16,12 @@
   <meta property="og:image" content="assets/hero_banner.png">
   <meta property="og:type" content="website">
   
-  <!-- Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
+  <!-- Fonts: preconnect first for faster loading, then load Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- Stylesheets -->
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
   <link rel="icon" type="image/jpeg" href="assets/MCRB LOGO.jpg">
   
   <!-- Lucide Icons CDN -->
@@ -1298,7 +1300,7 @@
               <label class="remember-me-label">
                 <input type="checkbox" style="accent-color: var(--primary-color);"> Remember Me
               </label>
-              <a href="#forgot" class="forgot-link">Forgot Password?</a>
+              <a href="#contact" data-tab="contact" class="forgot-link nav-link">Forgot Password? Contact Support</a>
             </div>
             <button type="button" class="btn btn-primary login-action-btn" style="width: 100%; justify-content: center; gap: 10px;">
               Sign In
