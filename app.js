@@ -1,6 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
   // --- STATE ---
   let currentTheme = localStorage.getItem('theme') || 'light';
+  let isAuthenticated = false;
+  const protectedViews = ['portal'];
   
   // --- MOCK DATABASE FOR PORTAL ---
   const mockBills = {
@@ -43,17 +45,17 @@ document.addEventListener('DOMContentLoaded', () => {
     'parking': {
       'KCD 123A': {
         owner: 'Edwin Mutwiri (Private Saloon)',
-        item: 'Daily Parking Fee - Meru CBD',
-        amount: 200,
+        item: 'Daily Parking Fee - Saloon Car',
+        amount: 50,
         arrears: 0,
         ref: 'PRK-123A',
         due: 'Today'
       },
       'KDA 888X': {
-        owner: 'Leah Kathure (Light Commercial)',
-        item: 'Daily Parking Fee - Maua Town',
-        amount: 300,
-        arrears: 100,
+        owner: 'Leah Kathure (Matatu 14-Seater)',
+        item: 'Daily Parking Fee - Matatu 14-Seater',
+        amount: 100,
+        arrears: 0,
         ref: 'PRK-888X',
         due: 'Today'
       }
@@ -106,6 +108,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- VIEW NAVIGATION SYSTEM ---
   function switchView(targetViewId) {
+    if (!isAuthenticated && protectedViews.includes(targetViewId)) {
+      alert('Please sign in or register before accessing MeruPay services.');
+      targetViewId = 'login';
+    }
+
     // Update Nav Active State
     navLinks.forEach(link => {
       if (link.getAttribute('data-tab') === targetViewId) {
@@ -129,6 +136,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Bind Nav Links Click Events
   navLinks.forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const tabId = link.getAttribute('data-tab');
+      if (tabId) switchView(tabId);
+    });
+  });
+
+  // Bind all quick tab links that use data-tab attributes
+  document.querySelectorAll('a[data-tab]').forEach(link => {
+    if (link.classList.contains('nav-link')) return;
     link.addEventListener('click', (e) => {
       e.preventDefault();
       const tabId = link.getAttribute('data-tab');
@@ -198,21 +215,42 @@ document.addEventListener('DOMContentLoaded', () => {
       link.addEventListener('click', (e) => { e.preventDefault(); switchView('login'); });
     });
     
-    // Fake login handler that routes to register if no existent details
+    // Login handler that requires credentials and unlocks service access
     document.querySelectorAll('.login-action-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        // Find adjacent inputs and check if empty
         const form = btn.closest('form');
         const idInput = form.querySelector('input[type="text"]');
-        if (idInput && idInput.value.trim() !== '') {
-          // Simulate "no existent details" by redirecting to register
-          alert("Notice: No account found with those details.\n\nRedirecting you to the registration page to create a new account.");
-          switchView('register');
+        const pwdInput = form.querySelector('input[type="password"]');
+
+        if (idInput && pwdInput && idInput.value.trim() !== '' && pwdInput.value.trim() !== '') {
+          isAuthenticated = true;
+          alert('Login successful. You may now access MeruPay services.');
+          switchView('home');
         } else {
-          alert("Please enter your login details.");
+          alert('Please enter both your ID and password to sign in.');
         }
       });
     });
+
+    // Registration complete handler that activates user session
+    const registrationForm = document.getElementById('registration-form');
+    if (registrationForm) {
+      const registerBtn = registrationForm.querySelector('button[type="button"]');
+      if (registerBtn) {
+        registerBtn.addEventListener('click', () => {
+          const regId = document.getElementById('regId');
+          const regPhone = document.getElementById('regPhone');
+          const regPassword = document.getElementById('regPassword');
+          if (regId && regPhone && regPassword && regId.value.trim() !== '' && regPhone.value.trim() !== '' && regPassword.value.trim() !== '') {
+            isAuthenticated = true;
+            alert('Registration complete. You are now signed in and can access services.');
+            switchView('home');
+          } else {
+            alert('Please complete all registration fields before continuing.');
+          }
+        });
+      }
+    }
   }
 
 
@@ -227,6 +265,12 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       sidebarClose.addEventListener('click', () => {
           sidebar.classList.remove('sidebar-open');
+      });
+      // Automatically close sidebar when scrolling on mobile to prevent it from hiding content
+      window.addEventListener('scroll', () => {
+          if (window.innerWidth <= 992 && sidebar.classList.contains('sidebar-open')) {
+              sidebar.classList.remove('sidebar-open');
+          }
       });
       // Close sidebar when a nav link is clicked on mobile
       document.querySelectorAll('#sidebar-nav-links .nav-link').forEach(link => {
@@ -448,26 +492,84 @@ document.addEventListener('DOMContentLoaded', () => {
     },
 
     waste: {
-      // Location keys: meru | other
-      smallBusiness:     { meru:  1200, other:   800, ref: 'Sch.4 – Item 1', note: 'Kiosk / hawker / small premises (annual)' },
-      mediumBusiness:    { meru:  3000, other:  2000, ref: 'Sch.4 – Item 2', note: 'Medium business / retail shop (annual)' },
-      largeBusiness:     { meru:  6000, other:  4000, ref: 'Sch.4 – Item 3', note: 'Large business / wholesale store (annual)' },
-      supermarket:       { meru: 12000, other:  8000, ref: 'Sch.4 – Item 4', note: 'Supermarket / mega store (annual)' },
-      institution:       { meru:  8000, other:  5000, ref: 'Sch.4 – Item 5', note: 'Schools, hospitals, churches (annual)' },
-      privateDumping:    { meru: 15000, other: 10000, ref: 'Sch.4 – Item 6', note: 'Private solid waste disposal at county facility (per trip)' },
+      // Location keys: meru | other  — SOURCE: Finance Act 2019, Section 5
+      // Thresholds based on SBP permit fee band
+      smallBusiness:    { meru:  1000, other:   200, ref: 'S.5(a) – Finance Act 2019', note: 'Small business: SBP permit fee up to Ksh 4,900 (annual)' },
+      mediumBusiness:   { meru:  3000, other:   500, ref: 'S.5(b) – Finance Act 2019', note: 'Medium business: SBP permit fee Ksh 4,901–7,000 (annual)' },
+      largeBusiness:    { meru:  5000, other:  1000, ref: 'S.5(c) – Finance Act 2019', note: 'Large business: SBP permit fee Ksh 7,001+ (annual)' },
+      banksInsurance:   { meru: 15000, other: 15000, ref: 'S.5(d) – Finance Act 2019', note: 'Insurance companies and banks (annual)' },
+      supermarket:      { meru: 25000, other: 25000, ref: 'S.5(e) – Finance Act 2019', note: 'Supermarkets, big stores, private learning institutions (annual)' },
+      professionalFirm: { meru:  3000, other:  1000, ref: 'S.5(f) – Finance Act 2019', note: 'Private registered firms: lawyers, doctors, accountants (annual)' },
     },
 
     parking: {
-      // Rates are DAILY. Location not a primary factor but CBD vs other noted.
-      // Location keys: cbd | other
-      motorbike:   { cbd:    30, other:   20, ref: 'Sch.3 – Item 1', note: 'Boda-boda / motorbike (per day)' },
-      car:         { cbd:   100, other:   70, ref: 'Sch.3 – Item 2', note: 'Private car or taxi (per day)' },
-      matatu:      { cbd:   150, other:  100, ref: 'Sch.3 – Item 3', note: '14-seater matatu (per day)' },
-      minibus:     { cbd:   200, other:  150, ref: 'Sch.3 – Item 4', note: 'Minibus / 25-seater (per day)' },
-      bus:         { cbd:   300, other:  200, ref: 'Sch.3 – Item 5', note: 'Full-size bus / 35+ seater (per day)' },
-      truck:       { cbd:   500, other:  350, ref: 'Sch.3 – Item 6', note: 'Truck / heavy goods vehicle (per day)' },
-      monthlyPass: { cbd:  2000, other: 1200, ref: 'Sch.3 – Item 7', note: 'Monthly reserved parking sticker (car only)' },
+      // SOURCE: Finance Act 2019, Section 3 — Transportation & Parking Fees
+      // Daily rates are UNIFORM county-wide (no CBD premium in the official schedule)
+      // Monthly charge also provided. Late payment of seasonal tickets = 25% penalty.
+      // Parking in un-designated areas = Ksh 10,000 fine.
+      // Location keys: daily | monthly (uniform — no cbd/other split in the Act)
+      motorbike:  { daily:  20, monthly:   300, ref: 'S.3(a) – Finance Act 2019', note: 'Boda-boda / motorbike — Daily: Ksh 20, Monthly: Ksh 300' },
+      tuktuk:     { daily:  50, monthly:  1000, ref: 'S.3(b) – Finance Act 2019', note: 'Tuktuk — Daily: Ksh 50, Monthly: Ksh 1,000' },
+      car:        { daily:  50, monthly:  1000, ref: 'S.3(d) – Finance Act 2019', note: 'Saloon car / taxi — Daily: Ksh 50, Monthly: Ksh 1,000' },
+      matatu:     { daily: 100, monthly:  1800, ref: 'S.3(f) – Finance Act 2019', note: 'Matatu shuttle (10–14 seater) — Daily: Ksh 100, Monthly: Ksh 1,800' },
+      bus:        { daily: 200, monthly:  3900, ref: 'S.3(h) – Finance Act 2019', note: 'Bus (30–62 seater) — Daily: Ksh 200, Monthly: Ksh 3,900' },
+      lightTruck: { daily: 150, monthly:  2200, ref: 'S.3(k) – Finance Act 2019', note: 'Light truck (1–6 tons) — Daily: Ksh 150, Monthly: Ksh 2,200' },
+      lorry:      { daily: 250, monthly:  4500, ref: 'S.3(m) – Finance Act 2019', note: 'Lorry — Daily: Ksh 250, Monthly: Ksh 4,500' },
+      trailer:    { daily: 300, monthly:  5000, ref: 'S.3(n) – Finance Act 2019', note: 'Trailer — Daily: Ksh 300, Monthly: Ksh 5,000' },
     },
+    liquor: {
+      generalRetail:      { meru: 30000, other: 15000, ref: 'Sch.1 – Item 1',  note: 'Application fee of Ksh 5,000 applies separately.' },
+      wholesale:          { meru: 55000, other: 50000, ref: 'Sch.1 – Item 2',  note: 'Application fee of Ksh 5,000 applies separately.' },
+      retailSpirits:      { meru: 50000, other: 24000, ref: 'Sch.1 – Item 3',  note: 'Application fee of Ksh 5,000 applies separately.' },
+      barRestaurant:      { meru: 24000, other: 30000, ref: 'Sch.1 – Item 4',  note: 'Application fee of Ksh 5,000 applies separately.' },
+      temporary:          { meru:  6000, other:  6000, ref: 'Sch.1 – Item 5',  note: 'Application fee of Ksh 5,000 applies separately.' },
+      nightClub:          { meru: 100000,other: 50000, ref: 'Sch.1 – Item 6',  note: 'Application fee of Ksh 5,000 applies separately.' },
+      depot:              { meru: 30000, other: 30000, ref: 'Sch.1 – Item 7',  note: 'Application fee of Ksh 5,000 applies separately.' },
+      distributor:        { meru: 55000, other: 50000, ref: 'Sch.1 – Item 8',  note: 'Application fee of Ksh 5,000 applies separately.' },
+      supermarket:        { meru: 75000, other: 70000, ref: 'Sch.1 – Item 9',  note: 'Application fee of Ksh 5,000 applies separately.' },
+      manufacturer:       { meru: 250000,other: 250000,ref: 'Sch.1 – Item 10', note: 'Application fee of Ksh 5,000 applies separately.' },
+    },
+
+    general_fees: {
+      bondWithdrawal:     { meru:  1000, other:  1000, ref: 'Sch.2 – Item a',  note: '' },
+      buildingMaterials:  { meru:  2000, other:  2000, ref: 'Sch.2 – Item c',  note: 'Commercial' },
+      kioskTransfer:      { meru:  3000, other:  3000, ref: 'Sch.2 – Item d',  note: '' },
+      tenderDocs:         { meru:  1000, other:  1000, ref: 'Sch.2 – Item e',  note: '' },
+      bouncedCheque:      { meru: 10000, other: 10000, ref: 'Sch.2 – Item m',  note: 'Penalty for returned cheques' },
+      subletPremises:     { meru:  2000, other:  2000, ref: 'Sch.2 – Item p',  note: '' },
+      changeActivity:     { meru:  2000, other:  2000, ref: 'Sch.2 – Item q',  note: 'Change of business activity' },
+      sbpApp:             { meru:  2000, other:  1000, ref: 'Sch.2 – Item r',  note: 'New SBP Application' },
+      sbpRenewal:         { meru:   500, other:   200, ref: 'Sch.2 – Item w',  note: 'SBP Renewal Application' },
+      leaseExtension:     { meru: 20000, other: 20000, ref: 'Sch.2 – Item x',  note: 'Renewal or Extension of Lease' },
+      transferConsent:    { meru:  6000, other:  6000, ref: 'Sch.2 – Item ab', note: 'Consent for Transfer/Sub-division' },
+      clearanceCert:      { meru:  4000, other:  4000, ref: 'Sch.2 – Item ad', note: 'Rates & Rents Clearance Certificate' },
+      sewerConnection:    { meru: 20000, other: 20000, ref: 'Sch.2 – Item ar', note: 'Sewer Line Connection' },
+    },
+
+    agri_cess: {
+      cabbages:           { amount:   20, ref: 'Sch.4 – Item 1(a)', note: 'Per 50kg bag' },
+      transportPickup:    { amount:  200, ref: 'Sch.4 – Item 1(b)', note: '0.5 Tonnes' },
+      transportLight:     { amount: 1000, ref: 'Sch.4 – Item 1(f)', note: '5–10 Tonnes' },
+      transportTrailer:   { amount: 4000, ref: 'Sch.4 – Item 1(h)', note: 'Over 17 Tonnes' },
+      sandLorry:          { amount: 1000, ref: 'Sch.4 – Item 5(c)', note: '7 Tonnes' },
+      sandTrailer:        { amount: 2000, ref: 'Sch.4 – Item 5(f)', note: '' },
+      blocksTrailer:      { amount: 1000, ref: 'Sch.4 – Item 6',    note: '' },
+      timberTrailer:      { amount: 5000, ref: 'Sch.4 – Item 12(e)',note: '' },
+      miraaPickup:        { amount: 1000, ref: 'Sch.4 – Item 18(b)',note: '' },
+      miraaLorry:         { amount: 2000, ref: 'Sch.4 – Item 18(c)',note: 'Lorry/Bus' },
+      teaCoffeeTax:       { amount:    0, ref: 'Sch.4 – Item 19(f)',note: '⚠️ Note: This tax is 1% of Gross Turnover. Please calculate manually and remit.' },
+    },
+
+    livestock: {
+      inspCattle:         { amount:  100, ref: 'Sch.6 – Item a',    note: 'Per head' },
+      inspSheep:          { amount:   40, ref: 'Sch.6 – Item b',    note: 'Per head' },
+      slaughterCatA:      { amount: 6000, ref: 'Sch.6 – Item c',    note: 'Per year' },
+      slaughterCatB:      { amount: 4000, ref: 'Sch.6 – Item d',    note: 'Per year' },
+      transCow:           { amount:  100, ref: 'Sch.6 – Item e',    note: 'Per head' },
+      transCamel:         { amount:  200, ref: 'Sch.6 – Item f',    note: 'Per head' },
+      liveSingleDay:      { amount:  600, ref: 'Sch.6 – Item g',    note: '1-20 heads' },
+    },
+
 
   };
 
@@ -486,29 +588,36 @@ document.addEventListener('DOMContentLoaded', () => {
     publichealth: 'Public Health',
     waste: 'Solid Waste Management',
     parking: 'Parking Fees',
+    liquor: 'Liquor Licensing',
+    general_fees: 'General Fees & Charges',
+    agri_cess: 'Agricultural Produce Cess',
+    livestock: 'Livestock & Meat Inspection',
+
   };
 
   // ── Search Index ─────────────────────────────────────────────
   const searchIndex = [
-    { label: 'Hotel',             category: 'sbp',          subKey: 'hotel',             location: 'meru' },
-    { label: 'Restaurant',        category: 'sbp',          subKey: 'restaurant',         location: 'meru' },
-    { label: 'Clinic / Hospital', category: 'sbp',          subKey: 'clinic',             location: 'meru' },
-    { label: 'School',            category: 'sbp',          subKey: 'school',             location: 'meru' },
-    { label: 'Kiosk',             category: 'sbp',          subKey: 'kiosk',              location: 'meru' },
-    { label: 'Hawker',            category: 'sbp',          subKey: 'hawker',             location: 'meru' },
-    { label: 'Mega Store',        category: 'sbp',          subKey: 'mega',               location: 'meru' },
-    { label: 'Professional Firm', category: 'sbp',          subKey: 'professional',       location: 'meru' },
-    { label: 'Billboard',         category: 'advertising',  subKey: 'billboard',          location: 'meru' },
-    { label: 'Signboard',         category: 'advertising',  subKey: 'businessSignboard',  location: 'meru' },
-    { label: 'Illuminated Sign',  category: 'advertising',  subKey: 'illuminated',        location: 'meru' },
-    { label: 'Road Show',         category: 'advertising',  subKey: 'roadShow',           location: 'meru' },
-    { label: 'Food Hygiene Cert', category: 'publichealth', subKey: 'foodHygiene',        location: 'meru' },
-    { label: 'Premises Inspection',category:'publichealth', subKey: 'premisesInspect',    location: 'meru' },
-    { label: 'Garbage – Small',   category: 'waste',        subKey: 'smallBusiness',      location: 'meru' },
-    { label: 'Garbage – Large',   category: 'waste',        subKey: 'largeBusiness',      location: 'meru' },
-    { label: 'Car Parking',       category: 'parking',      subKey: 'car',                location: 'cbd'  },
-    { label: 'Matatu Parking',    category: 'parking',      subKey: 'matatu',             location: 'cbd'  },
-    { label: 'Monthly Pass',      category: 'parking',      subKey: 'monthlyPass',        location: 'cbd'  },
+    { label: 'Garbage – Small',          category: 'waste',        subKey: 'smallBusiness',      location: 'meru' },
+    { label: 'Garbage – Medium',         category: 'waste',        subKey: 'mediumBusiness',     location: 'meru' },
+    { label: 'Garbage – Large',          category: 'waste',        subKey: 'largeBusiness',      location: 'meru' },
+    { label: 'Garbage – Banks/Insurance',category: 'waste',        subKey: 'banksInsurance',     location: 'meru' },
+    { label: 'Garbage – Supermarket',    category: 'waste',        subKey: 'supermarket',        location: 'meru' },
+    { label: 'Garbage – Professional',   category: 'waste',        subKey: 'professionalFirm',   location: 'meru' },
+    { label: 'Motorbike Parking (Daily)',  category: 'parking',    subKey: 'motorbike',          location: 'daily'  },
+    { label: 'Tuktuk Parking (Daily)',     category: 'parking',    subKey: 'tuktuk',             location: 'daily'  },
+    { label: 'Car Parking (Daily)',        category: 'parking',    subKey: 'car',                location: 'daily'  },
+    { label: 'Matatu Parking (Daily)',     category: 'parking',    subKey: 'matatu',             location: 'daily'  },
+    { label: 'Bus Parking (Daily)',        category: 'parking',    subKey: 'bus',                location: 'daily'  },
+    { label: 'Light Truck Parking (Daily)',category: 'parking',    subKey: 'lightTruck',         location: 'daily'  },
+    { label: 'Lorry Parking (Daily)',      category: 'parking',    subKey: 'lorry',              location: 'daily'  },
+    { label: 'Trailer Parking (Daily)',    category: 'parking',    subKey: 'trailer',            location: 'daily'  },
+    { label: 'Monthly Parking (Car)',      category: 'parking',    subKey: 'car',                location: 'monthly'},
+    { label: 'Liquor – General Retail',    category: 'liquor',       subKey: 'generalRetail',      location: 'meru' },
+    { label: 'Liquor – Night Club',        category: 'liquor',       subKey: 'nightClub',          location: 'meru' },
+    { label: 'General – Bounced Cheque',   category: 'general_fees', subKey: 'bouncedCheque',      location: 'meru' },
+    { label: 'Cess – Tea/Coffee Tax (1%)', category: 'agri_cess',    subKey: 'teaCoffeeTax',       location: 'county' },
+    { label: 'Cess – Transport (Trailer)', category: 'agri_cess',    subKey: 'transportTrailer',   location: 'county' },
+    { label: 'Livestock – Cow Inspection', category: 'livestock',    subKey: 'inspCattle',         location: 'county' },
   ];
 
   // ── Dynamic Field Templates ────────────────────────────────────
@@ -587,12 +696,12 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="form-group">
         <label>Premises / Business Type</label>
         <select id="wasteType" class="form-control">
-          <option value="smallBusiness">Small Business / Kiosk / Hawker</option>
-          <option value="mediumBusiness">Medium Business / Retail Shop</option>
-          <option value="largeBusiness">Large Business / Wholesale Store</option>
-          <option value="supermarket">Supermarket / Mega Store</option>
-          <option value="institution">Institution (School, Hospital, Church)</option>
-          <option value="privateDumping">Private Solid Waste Disposal (per trip)</option>
+          <option value="smallBusiness">Small Business (SBP fee up to Ksh 4,900)</option>
+          <option value="mediumBusiness">Medium Business (SBP fee Ksh 4,901–7,000)</option>
+          <option value="largeBusiness">Large Business (SBP fee Ksh 7,001+)</option>
+          <option value="banksInsurance">Insurance Companies &amp; Banks</option>
+          <option value="supermarket">Supermarkets / Big Stores / Private Learning Institutions</option>
+          <option value="professionalFirm">Private Registered Firms (Lawyers, Doctors, Accountants)</option>
         </select>
       </div>
       <div class="form-group">
@@ -608,21 +717,117 @@ document.addEventListener('DOMContentLoaded', () => {
         <label>Vehicle Type</label>
         <select id="vehicleType" class="form-control">
           <option value="motorbike">Motorbike / Boda-Boda</option>
-          <option value="car">Private Car / Taxi</option>
-          <option value="matatu">Matatu (14-Seater)</option>
-          <option value="minibus">Minibus (25-Seater)</option>
-          <option value="bus">Bus / 35+ Seater</option>
-          <option value="truck">Truck / Heavy Goods Vehicle</option>
-          <option value="monthlyPass">Monthly Reserved Parking Pass (Car)</option>
+          <option value="tuktuk">Tuktuk</option>
+          <option value="car">Saloon Car / Taxi</option>
+          <option value="matatu">Matatu Shuttle (10–14 Seater)</option>
+          <option value="bus">Bus (30–62 Seater)</option>
+          <option value="lightTruck">Light Truck (1–6 Tons)</option>
+          <option value="lorry">Lorry</option>
+          <option value="trailer">Trailer</option>
         </select>
       </div>
       <div class="form-group">
-        <label>Parking Zone</label>
-        <select id="parkingZone" class="form-control">
-          <option value="cbd">CBD / Town Centre</option>
-          <option value="other">Other Areas</option>
+        <label>Charge Type</label>
+        <select id="parkingChargeType" class="form-control">
+          <option value="daily">Daily Charge</option>
+          <option value="monthly">Monthly Seasonal Ticket</option>
         </select>
       </div>`,
+    liquor: `
+      <div class="form-group">
+        <label>Liquor License Type</label>
+        <select id="liquorType" class="form-control">
+          <option value="generalRetail">General Retail Alcoholic Drink</option>
+          <option value="wholesale">Wines &amp; Spirits Wholesale</option>
+          <option value="retailSpirits">Wines &amp; Spirits Retail</option>
+          <option value="barRestaurant">Bar, Restaurant &amp; Nyama Choma</option>
+          <option value="temporary">Temporary License</option>
+          <option value="nightClub">Night Club</option>
+          <option value="depot">Alcoholic Drink Depot</option>
+          <option value="distributor">Alcoholic Drink Distributor</option>
+          <option value="supermarket">Supermarket (Big) Alcoholic</option>
+          <option value="manufacturer">Alcoholic Drink Manufacturer</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Location</label>
+        <select id="liquorLocation" class="form-control">
+          <option value="meru">Meru Town &amp; Maua</option>
+          <option value="other">Other Markets</option>
+        </select>
+      </div>`,
+
+    general_fees: `
+      <div class="form-group">
+        <label>Fee Type</label>
+        <select id="genFeeType" class="form-control">
+          <option value="bondWithdrawal">Bond Withdrawal Fee</option>
+          <option value="buildingMaterials">Building materials approval (Commercial)</option>
+          <option value="kioskTransfer">Kiosk/house/stall transfer</option>
+          <option value="tenderDocs">Application for tender documents</option>
+          <option value="bouncedCheque">Bounced cheque penalty</option>
+          <option value="subletPremises">Sublet of Business Premises</option>
+          <option value="changeActivity">Change of business activity</option>
+          <option value="sbpApp">New Single Business Permit application</option>
+          <option value="sbpRenewal">SBP Renewal application fee</option>
+          <option value="leaseExtension">Renewal or Extension of Lease</option>
+          <option value="transferConsent">Consent for Transfer/Sub-division</option>
+          <option value="clearanceCert">Rates &amp; Rents Clearance Certificate</option>
+          <option value="sewerConnection">Sewer Line Connection</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Location</label>
+        <select id="genFeeLocation" class="form-control">
+          <option value="meru">Meru / Maua / Nkubu</option>
+          <option value="other">Other Sub-Counties</option>
+        </select>
+      </div>`,
+
+    agri_cess: `
+      <div class="form-group">
+        <label>Produce &amp; Transport Type</label>
+        <select id="agriType" class="form-control">
+          <option value="cabbages">Cabbages/Bananas/Nuts (per 50kg bag)</option>
+          <option value="transportPickup">Produce Transport — Pick-up/Probox (0.5T)</option>
+          <option value="transportLight">Produce Transport — Light Truck (5–10T)</option>
+          <option value="transportTrailer">Produce Transport — Trailer (Over 17T)</option>
+          <option value="sandLorry">Sand Transport — Lorry (7T)</option>
+          <option value="sandTrailer">Sand Transport — Trailer</option>
+          <option value="blocksTrailer">Building Blocks/Stones — Trailer</option>
+          <option value="timberTrailer">Timber Transport — Trailer</option>
+          <option value="miraaPickup">Miraa Cess — Pick-up</option>
+          <option value="miraaLorry">Miraa Cess — Lorry/Bus</option>
+          <option value="teaCoffeeTax">Tea/Coffee Industrial Gross Turnover Tax (1%)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Location</label>
+        <select id="agriLocation" class="form-control" disabled>
+          <option value="county">County-Wide / Border Points</option>
+        </select>
+      </div>`,
+
+    livestock: `
+      <div class="form-group">
+        <label>Service Type</label>
+        <select id="livestockType" class="form-control">
+          <option value="inspCattle">Meat Inspection: Cattle/Camel (per head)</option>
+          <option value="inspSheep">Meat Inspection: Sheep/Goat/Pig (per head)</option>
+          <option value="slaughterCatA">Slaughterhouse License (Category A)</option>
+          <option value="slaughterCatB">Slaughterhouse License (Category B)</option>
+          <option value="transCow">Livestock Transport Cess: Cow/Bull/Donkey</option>
+          <option value="transCamel">Livestock Transport Cess: Camel</option>
+          <option value="liveSingleDay">Live Animals Single Day Permit</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Location</label>
+        <select id="livestockLocation" class="form-control" disabled>
+          <option value="county">County-Wide</option>
+        </select>
+      </div>`,
+
   };
 
   // ── DOM References ────────────────────────────────────────────
@@ -706,12 +911,52 @@ document.addEventListener('DOMContentLoaded', () => {
           note     = row.note;
 
         } else if (cat === 'parking') {
-          const type = document.getElementById('vehicleType').value;
-          const zone = document.getElementById('parkingZone').value;
-          const row  = feeSchedule.parking[type];
-          amount   = row[zone] ?? row.other;
-          service  = document.getElementById('vehicleType').selectedOptions[0].text;
-          location = locationLabels[zone] || zone;
+          const type       = document.getElementById('vehicleType').value;
+          const chargeType = document.getElementById('parkingChargeType').value;
+          const row        = feeSchedule.parking[type];
+          amount   = row[chargeType];
+          const chargeLabel = chargeType === 'daily' ? 'Daily Rate' : 'Monthly Seasonal Ticket';
+          service  = document.getElementById('vehicleType').selectedOptions[0].text + ' (' + chargeLabel + ')';
+          location = 'County-Wide (Uniform Rate — Finance Act 2019 S.3)';
+          ref      = row.ref;
+          note     = row.note + (chargeType === 'monthly' ? ' | ⚠️ Late payment of monthly tickets attracts a 25% penalty. Parking in un-designated areas = Ksh 10,000 fine.' : ' | ⚠️ Parking in un-designated areas attracts a fine of Ksh 10,000.');
+
+        } else if (cat === 'liquor') {
+          const type = document.getElementById('liquorType').value;
+          const loc  = document.getElementById('liquorLocation').value;
+          const row  = feeSchedule.liquor[type];
+          amount   = row[loc] ?? row.other;
+          service  = document.getElementById('liquorType').selectedOptions[0].text;
+          location = locationLabels[loc] || loc;
+          ref      = row.ref;
+          note     = row.note;
+
+        } else if (cat === 'general_fees') {
+          const type = document.getElementById('genFeeType').value;
+          const loc  = document.getElementById('genFeeLocation').value;
+          const row  = feeSchedule.general_fees[type];
+          amount   = row[loc] ?? row.other;
+          service  = document.getElementById('genFeeType').selectedOptions[0].text;
+          location = locationLabels[loc] || loc;
+          ref      = row.ref;
+          note     = row.note;
+
+        } else if (cat === 'agri_cess') {
+          const type = document.getElementById('agriType').value;
+          const row  = feeSchedule.agri_cess[type];
+          amount   = row.amount;
+          service  = document.getElementById('agriType').selectedOptions[0].text;
+          location = 'County-Wide / Border Points';
+          ref      = row.ref;
+          note     = row.note;
+          if (type === 'teaCoffeeTax') amount = 0;
+
+        } else if (cat === 'livestock') {
+          const type = document.getElementById('livestockType').value;
+          const row  = feeSchedule.livestock[type];
+          amount   = row.amount;
+          service  = document.getElementById('livestockType').selectedOptions[0].text;
+          location = 'County-Wide';
           ref      = row.ref;
           note     = row.note;
         }
@@ -789,7 +1034,12 @@ document.addEventListener('DOMContentLoaded', () => {
           advertising: { field: 'advertType',   locField: 'advertLocation' },
           publichealth:{ field: 'phType',        locField: 'phLocation'   },
           waste:       { field: 'wasteType',     locField: 'wasteLocation' },
-          parking:     { field: 'vehicleType',   locField: 'parkingZone'  },
+          parking:     { field: 'vehicleType',   locField: 'parkingChargeType' },
+          liquor:      { field: 'liquorType',    locField: 'liquorLocation' },
+          general_fees:{ field: 'genFeeType',    locField: 'genFeeLocation' },
+          agri_cess:   { field: 'agriType',      locField: 'agriLocation' },
+          livestock:   { field: 'livestockType', locField: 'livestockLocation' },
+
         };
         const map = subMap[item.category];
         if (map) {
@@ -1197,12 +1447,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const systemPrompt = `You are a helpful, friendly customer support assistant for the Meru County Revenue Board (MCRB) in Kenya.
 You help residents, traders, and businesses with questions about:
-- Single Business Permits (SBP) — due Dec 31, fees based on sector/size/zone, paid via M-Pesa Paybill 303030
+- Single Business Permits (SBP) — due Dec 31, fees based on sector/size/zone, paid via M-Pesa Paybill 440112
 - Land rates — due March 31, 1% monthly penalty, waiver periods announced periodically
 - Agricultural produce cess — on Miraa, Tea, Coffee, Avocado etc, via cashless weighbridges
-- Parking fees — KES 200/day Meru CBD, KES 100 minor towns, dial *377#
+- Parking fees — Motorbike KES 20/day, Car/Taxi KES 50/day, Matatu KES 100/day, Bus KES 200/day, Lorry KES 250/day, Trailer KES 300/day (uniform county-wide, Finance Act 2019 S.3). Monthly seasonal tickets available. Un-designated parking = KES 10,000 fine. Dial *412#
 - Market fees, outdoor advertising, slaughter fees, house rent, way leave charges
-- Payment methods: M-Pesa Paybill 303030, USSD *377#, self-service portal
+- Payment methods: M-Pesa Paybill 440112, USSD *412#, self-service portal
 - Contact: Mt Kenya House, Makutano Junction, Meru Town. info@merurevenue.go.ke
 - Revenue performance: KES 1.15B collected 2024-25, target KES 2B
 - 100% cashless — no cash accepted at offices
@@ -1233,13 +1483,13 @@ Keep answers concise (3–5 sentences max), warm, and in plain language. If unsu
     if (query.includes('hello') || query.includes('hi ') || query.includes('hey')) {
       return "Hello! I'm your Meru County Revenue Board assistant. How can I help you with your tax, land rates, or permit enquiries today?";
     } else if (query.includes('paybill') || query.includes('how to pay') || query.includes('payment')) {
-      return "You can pay via M-Pesa Paybill <strong>303030</strong> or by dialing <strong>*377#</strong>. Online, use the MeruPay Portal on this site. All payments are cashless — no cash accepted at county offices.";
+      return "You can pay via M-Pesa Paybill <strong>440112</strong> or by dialing <strong>*412#</strong>. Online, use the MeruPay Portal on this site. All payments are cashless — no cash accepted at county offices.";
     } else if (query.includes('permit') || query.includes('sbp') || query.includes('license') || query.includes('business')) {
       return "All businesses in Meru County must renew their Single Business Permit (SBP) annually by <strong>December 31st</strong>. Use the Fee Calculator tab to estimate your cost, then pay via MeruPay.";
     } else if (query.includes('land') || query.includes('rates') || query.includes('plot')) {
       return "Land rates are due by <strong>March 31st</strong> every year. Arrears attract 1% monthly interest. Search your plot number on the Self-Service Portal tab to see your outstanding balance and pay.";
     } else if (query.includes('parking')) {
-      return "Daily parking in Meru CBD costs <strong>KES 200</strong> per day, and KES 100 in Maua/Nkubu towns. You can pay by dialing <strong>*377#</strong> or via the MeruPay Portal.";
+      return "Daily parking fees (county-wide): Motorbike <strong>KES 20</strong>, Saloon Car/Taxi <strong>KES 50</strong>, Matatu <strong>KES 100</strong>, Bus <strong>KES 200</strong>, Lorry <strong>KES 250</strong>, Trailer <strong>KES 300</strong>. Monthly seasonal tickets also available. Pay via <strong>*412#</strong> or MeruPay Portal. Note: un-designated parking attracts a <strong>KES 10,000 fine</strong>. (Source: Finance Act 2019, Section 3)";
     } else if (query.includes('cess') || query.includes('miraa') || query.includes('tea') || query.includes('produce')) {
       return "Agricultural produce cess is levied on goods like Miraa, Tea, Coffee, and Avocado moving through county borders, collected cashlessly at weighbridges under the Agricultural Produce Act.";
     } else if (query.includes('contact') || query.includes('phone') || query.includes('email') || query.includes('where')) {
