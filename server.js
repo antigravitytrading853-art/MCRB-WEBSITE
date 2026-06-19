@@ -18,11 +18,8 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
-  // Normalize URL to remove query parameters or hash fragments, then decode
-  // percent-encoded characters so filenames with spaces (e.g. "MCRB LOGO.jpg"
-  // sent as "MCRB%20LOGO.jpg") resolve correctly on the filesystem.
-  const rawUrl = req.url.split('?')[0].split('#')[0];
-  const cleanUrl = decodeURIComponent(rawUrl);
+  // Normalize URL to remove query parameters or hash fragments
+  const cleanUrl = req.url.split('?')[0].split('#')[0];
   let filePath = path.join(__dirname, cleanUrl === '/' ? 'index.html' : cleanUrl);
   
   // Prevent directory traversal attacks

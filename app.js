@@ -1,8 +1,14 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('App loaded successfully!');
+  
   // --- STATE ---
   let currentTheme = localStorage.getItem('theme') || 'light';
   let isAuthenticated = false;
   const protectedViews = ['portal'];
+  
+  // Store current payment data
+  let currentPaymentItem = null;
+  let currentPaymentName = null;
   
   // --- MOCK DATABASE FOR PORTAL ---
   const mockBills = {
@@ -14,14 +20,6 @@ document.addEventListener('DOMContentLoaded', () => {
         arrears: 1500,
         ref: 'PLT-88910',
         due: '31st March 2026'
-      },
-      '456/NKUBU/2023': {
-        owner: 'Phyllis Kendi Mwenda',
-        item: 'Plot No. 456/NKUBU/2023 (Nkubu)',
-        amount: 5200,
-        arrears: 0,
-        ref: 'PLT-55421',
-        due: '31st March 2026'
       }
     },
     'permit': {
@@ -31,14 +29,6 @@ document.addEventListener('DOMContentLoaded', () => {
         amount: 14500,
         arrears: 0,
         ref: 'SBP-8890',
-        due: '31st Dec 2026'
-      },
-      'SBP-2024-5541': {
-        owner: 'Gakoromone Agro-Tech Enterprise',
-        item: 'Single Business Permit (Agribusiness/Store)',
-        amount: 9800,
-        arrears: 2400,
-        ref: 'SBP-5541',
         due: '31st Dec 2026'
       }
     },
@@ -50,39 +40,913 @@ document.addEventListener('DOMContentLoaded', () => {
         arrears: 0,
         ref: 'PRK-123A',
         due: 'Today'
-      },
-      'KDA 888X': {
-        owner: 'Leah Kathure (Matatu 14-Seater)',
-        item: 'Daily Parking Fee - Matatu 14-Seater',
-        amount: 100,
-        arrears: 0,
-        ref: 'PRK-888X',
-        due: 'Today'
       }
     }
   };
 
-  // --- INITIALIZE THEMES & UI STATE ---
-  document.documentElement.setAttribute('data-theme', currentTheme);
-
-  // Initialize Lucide Icons
-  if (window.lucide) {
-    window.lucide.createIcons();
+  // Helper function to check if service has renewal fees
+  function hasRenewalFee(itemData) {
+    return itemData.renewal !== undefined && Object.keys(itemData.renewal).length > 0;
   }
 
-  // --- DOM ELEMENTS ---
+  // Function to get fee amount based on location and type
+  function getFeeAmount(itemData, location, type) {
+    let amount = 0;
+    
+    if (location === 'all') {
+      if (type === 'renewal' && itemData.renewal && itemData.renewal.all) {
+        amount = itemData.renewal.all;
+      } else if (itemData.fees && itemData.fees.all) {
+        amount = itemData.fees.all;
+      }
+      return amount;
+    }
+    
+    if (type === 'renewal' && itemData.renewal) {
+      if (itemData.renewal.all) {
+        amount = itemData.renewal.all;
+      } else if (location && itemData.renewal[location]) {
+        amount = itemData.renewal[location];
+      } else if (itemData.fees && itemData.fees[location]) {
+        amount = itemData.fees[location];
+      }
+    } else {
+      if (itemData.fees && itemData.fees.all) {
+        amount = itemData.fees.all;
+      } else if (itemData.fees && location && itemData.fees[location]) {
+        amount = itemData.fees[location];
+      }
+    }
+    
+    return amount;
+  }
+
+  // --- COMPLETE SERVICES DATA WITH FINANCE ACT 2019 FEES ---
+  const categoryServicesData = {
+    business: {
+      title: "Business & Trade Services",
+      items: [
+        { name: "Single Business Permit (SBP) - Small Trader", fees: { meru: 3400, maua: 2000, nkubu: 2000, other: 2000 }, renewal: { meru: 2000, maua: 1000, nkubu: 1000, other: 1000 }, locations: ["meru", "maua", "nkubu", "other"] },
+        { name: "Single Business Permit (SBP) - Medium Trader", fees: { meru: 7000, maua: 4000, nkubu: 4000, other: 4000 }, renewal: { meru: 4000, maua: 2500, nkubu: 2500, other: 2500 }, locations: ["meru", "maua", "nkubu", "other"] },
+        { name: "Single Business Permit (SBP) - Large Trader", fees: { meru: 14000, maua: 10000, nkubu: 10000, other: 8000 }, renewal: { meru: 7000, maua: 5000, nkubu: 5000, other: 4000 }, locations: ["meru", "maua", "nkubu", "other"] },
+        { name: "Single Business Permit (SBP) - Mega Store", fees: { meru: 50000, maua: 30000, nkubu: 30000, other: 24000 }, renewal: { meru: 25000, maua: 15000, nkubu: 15000, other: 12000 }, locations: ["meru", "maua", "nkubu", "other"] },
+        { name: "Kiosk License", fees: { meru: 2700, maua: 1600, nkubu: 1600, other: 1500 }, renewal: { meru: 1350, maua: 800, nkubu: 800, other: 750 }, locations: ["meru", "maua", "nkubu", "other"] },
+        { name: "Hawker Permit (with vehicle)", fees: { meru: 3500, maua: 2000, nkubu: 2000, other: 2000 }, renewal: { meru: 1750, maua: 1000, nkubu: 1000, other: 1000 }, locations: ["meru", "maua", "nkubu", "other"] },
+        { name: "Sublet of Business Premises", fees: { meru: 2000, maua: 2000, nkubu: 2000, other: 2000 }, locations: ["meru", "maua", "nkubu", "other"] },
+        { name: "Change of Business Activity", fees: { meru: 2000, maua: 2000, nkubu: 2000, other: 2000 }, locations: ["meru", "maua", "nkubu", "other"] }
+      ]
+    },
+    transport: {
+      title: "Transport & Parking Services (Finance Act 2019 - Section 3)",
+      items: [
+        { name: "Motor Bike Parking (Daily)", fees: { all: 20 }, locations: ["all"] },
+        { name: "Saloon Car / Taxi Parking (Daily)", fees: { all: 50 }, locations: ["all"] },
+        { name: "Matatu (10-14 Seater) Parking (Daily)", fees: { all: 100 }, locations: ["all"] },
+        { name: "Bus (30-62 Seater) Parking (Daily)", fees: { all: 200 }, locations: ["all"] },
+        { name: "Lorry Parking (Daily)", fees: { all: 250 }, locations: ["all"] },
+        { name: "Trailer Parking (Daily)", fees: { all: 300 }, locations: ["all"] },
+        { name: "Parking in Un-designated Areas (Fine)", fees: { all: 10000 }, locations: ["all"] },
+        { name: "Vehicle Impounding Fee", fees: { all: 3000 }, locations: ["all"] }
+      ]
+    },
+    land: {
+      title: "Land & Property Services (Finance Act 2019 - Eighth Schedule)",
+      items: [
+        { name: "Plot Boundary Indication Fee", fees: { all: 500 }, locations: ["all"] },
+        { name: "Plot Demarcation Fee", fees: { all: 3000 }, locations: ["all"] },
+        { name: "Occupation Permit", fees: { all: 4000 }, locations: ["all"] },
+        { name: "Change of User (Leasehold)", fees: { all: 20000 }, locations: ["all"] },
+        { name: "Consent for Transfer/Sub-division", fees: { all: 6000 }, locations: ["all"] },
+        { name: "Rates Clearance Certificate", fees: { all: 4000 }, locations: ["all"] }
+      ]
+    },
+    health: {
+      title: "Health & Licensing Services (Finance Act 2019 - Eleventh Schedule)",
+      items: [
+        { name: "Food Hygiene License - Retail Shop", fees: { all: 300 }, renewal: { all: 300 }, locations: ["all"] },
+        { name: "Food Hygiene License - Butchery", fees: { all: 600 }, renewal: { all: 600 }, locations: ["all"] },
+        { name: "Food Hygiene License - Bakery", fees: { all: 3000 }, renewal: { all: 3000 }, locations: ["all"] },
+        { name: "Food Hygiene License - Supermarket", fees: { all: 5000 }, renewal: { all: 5000 }, locations: ["all"] },
+        { name: "Health Clearance - Hotel/Restaurant", fees: { all: 6000 }, renewal: { all: 6000 }, locations: ["all"] },
+        { name: "Medical Clinic Registration", fees: { all: 4000 }, renewal: { all: 2000 }, locations: ["all"] },
+        { name: "Pharmacy/Chemist Registration", fees: { all: 4000 }, renewal: { all: 2000 }, locations: ["all"] },
+        { name: "Vaccination - Yellow Fever", fees: { all: 1000 }, locations: ["all"] }
+      ]
+    },
+    agriculture: {
+      title: "Agriculture & Cess Services (Finance Act 2019 - Part III of Second Schedule)",
+      items: [
+        { name: "Cabbages Cess (per 50kg bag)", fees: { all: 20 }, locations: ["all"] },
+        { name: "Bananas Cess (per bunch)", fees: { all: 20 }, locations: ["all"] },
+        { name: "Miraa Cess - Pick-up", fees: { all: 1000 }, locations: ["all"] },
+        { name: "Miraa Cess - Lorry/Bus", fees: { all: 2000 }, locations: ["all"] },
+        { name: "Charcoal Cess (per bag)", fees: { all: 20 }, locations: ["all"] },
+        { name: "Timber Transport - Pick-up", fees: { all: 500 }, locations: ["all"] },
+        { name: "Timber Transport - Trailer", fees: { all: 5000 }, locations: ["all"] },
+        { name: "Meat Inspection - Cattle (per head)", fees: { all: 100 }, locations: ["all"] },
+        { name: "Slaughterhouse License (Category A)", fees: { all: 6000 }, locations: ["all"] }
+      ]
+    },
+    construction: {
+      title: "Construction & Building Services (Finance Act 2019 - Sixth Schedule)",
+      items: [
+        { name: "Building Plan Approval (0-46m²)", fees: { all: 1000 }, locations: ["all"] },
+        { name: "Building Plan Approval (46-93m²)", fees: { all: 2000 }, locations: ["all"] },
+        { name: "Building Plan Approval (93-140m²)", fees: { all: 3000 }, locations: ["all"] },
+        { name: "Building Plan Approval (140-186m²)", fees: { all: 4000 }, locations: ["all"] },
+        { name: "Building Plan Approval (186-279m²)", fees: { all: 5000 }, locations: ["all"] },
+        { name: "Building Inspection - Structural", fees: { all: 4000 }, locations: ["all"] },
+        { name: "Fine for Late Submission of Plans", fees: { all: 3500 }, locations: ["all"] }
+      ]
+    },
+    alcohol: {
+      title: "Alcohol Licenses (Finance Act 2019 - Part IV)",
+      items: [
+        { name: "General Retail License (Meru/Maua)", fees: { meru: 35000, maua: 35000 }, renewal: { meru: 30000, maua: 30000 }, locations: ["meru", "maua"] },
+        { name: "General Retail License (Nkubu/Other)", fees: { nkubu: 20000, other: 20000 }, renewal: { nkubu: 15000, other: 15000 }, locations: ["nkubu", "other"] },
+        { name: "Bar & Restaurant License (Meru/Maua)", fees: { meru: 45000, maua: 45000 }, renewal: { meru: 40000, maua: 40000 }, locations: ["meru", "maua"] },
+        { name: "Bar & Restaurant License (Nkubu/Other)", fees: { nkubu: 35000, other: 35000 }, renewal: { nkubu: 30000, other: 30000 }, locations: ["nkubu", "other"] },
+        { name: "Night Club License (Meru/Maua)", fees: { meru: 105000, maua: 105000 }, renewal: { meru: 100000, maua: 100000 }, locations: ["meru", "maua"] },
+        { name: "Night Club License (Nkubu/Other)", fees: { nkubu: 55000, other: 55000 }, renewal: { nkubu: 50000, other: 50000 }, locations: ["nkubu", "other"] },
+        { name: "Wines & Spirits Retail", fees: { meru: 29000, maua: 29000, nkubu: 20000, other: 20000 }, renewal: { meru: 24000, maua: 24000, nkubu: 15000, other: 15000 }, locations: ["meru", "maua", "nkubu", "other"] },
+        { name: "Temporary License", fees: { all: 11000 }, locations: ["all"] }
+      ]
+    },
+    waste: {
+      title: "Waste Management Services (Finance Act 2019 - Fourth Schedule)",
+      items: [
+        { name: "Small Business Refuse", fees: { meru: 2000, maua: 1000, nkubu: 1000, other: 1000 }, locations: ["meru", "maua", "nkubu", "other"] },
+        { name: "Medium Business Refuse", fees: { meru: 5000, maua: 2000, nkubu: 2000, other: 2000 }, locations: ["meru", "maua", "nkubu", "other"] },
+        { name: "Large Business Refuse", fees: { meru: 15000, maua: 3000, nkubu: 3000, other: 3000 }, locations: ["meru", "maua", "nkubu", "other"] },
+        { name: "Residential Refuse (per annum)", fees: { meru: 7000, maua: 1000, nkubu: 1000, other: 1000 }, locations: ["meru", "maua", "nkubu", "other"] },
+        { name: "Illegal Dumping Fine", fees: { all: 50000 }, locations: ["all"] }
+      ]
+    }
+  };
+
+  // --- CALCULATOR INITIALIZATION ---
+  function initCalculator() {
+    const categorySelect = document.getElementById('serviceCategory');
+    const specificServiceSelect = document.getElementById('specificService');
+    const locationSelect = document.getElementById('calcLocation');
+    const appTypeSelect = document.getElementById('appType');
+    const calculateBtn = document.getElementById('calculateFeeBtn');
+    const resultService = document.getElementById('resultService');
+    const resultAmount = document.getElementById('resultAmount');
+    const resultLocation = document.getElementById('resultLocation');
+    const resultType = document.getElementById('resultType');
+    const feeProceedBtn = document.getElementById('feeProceedBtn');
+    
+    if (!categorySelect) {
+      console.log('Calculator elements not found');
+      return;
+    }
+    
+    let currentServiceData = null;
+    let currentServiceName = null;
+    
+    const servicesByCategory = {
+      business: categoryServicesData.business.items,
+      transport: categoryServicesData.transport.items,
+      land: categoryServicesData.land.items,
+      health: categoryServicesData.health.items,
+      agriculture: categoryServicesData.agriculture.items,
+      construction: categoryServicesData.construction.items,
+      alcohol: categoryServicesData.alcohol.items,
+      waste: categoryServicesData.waste.items
+    };
+    
+    categorySelect.addEventListener('change', function() {
+      const category = this.value;
+      const specificGroup = document.getElementById('specificServiceGroup');
+      const locationGroup = document.getElementById('calcLocationGroup');
+      const appTypeGroup = document.getElementById('appTypeGroup');
+      const calcButtonGroup = document.getElementById('calcButtonGroup');
+      
+      if (!category) {
+        if (specificGroup) specificGroup.style.display = 'none';
+        if (locationGroup) locationGroup.style.display = 'none';
+        if (appTypeGroup) appTypeGroup.style.display = 'none';
+        if (calcButtonGroup) calcButtonGroup.style.display = 'none';
+        if (specificServiceSelect) specificServiceSelect.innerHTML = '<option value="">-- First select a category --</option>';
+        if (resultService) resultService.textContent = '—';
+        if (resultAmount) resultAmount.textContent = 'KES 0';
+        if (resultLocation) resultLocation.textContent = '—';
+        if (resultType) resultType.textContent = '—';
+        if (feeProceedBtn) feeProceedBtn.disabled = true;
+        return;
+      }
+      
+      const services = servicesByCategory[category];
+      if (services && specificServiceSelect) {
+        specificServiceSelect.innerHTML = '<option value="">-- Select a service --</option>';
+        services.forEach(service => {
+          const option = document.createElement('option');
+          option.value = service.name;
+          option.textContent = service.name;
+          option.setAttribute('data-service', JSON.stringify(service));
+          specificServiceSelect.appendChild(option);
+        });
+        if (specificGroup) specificGroup.style.display = 'block';
+        if (locationGroup) locationGroup.style.display = 'none';
+        if (appTypeGroup) appTypeGroup.style.display = 'none';
+        if (calcButtonGroup) calcButtonGroup.style.display = 'none';
+        if (resultService) resultService.textContent = '—';
+        if (resultAmount) resultAmount.textContent = 'KES 0';
+        if (resultLocation) resultLocation.textContent = '—';
+        if (resultType) resultType.textContent = '—';
+        if (feeProceedBtn) feeProceedBtn.disabled = true;
+      }
+    });
+    
+    specificServiceSelect.addEventListener('change', function() {
+      const selectedOption = this.options[this.selectedIndex];
+      const serviceDataAttr = selectedOption.getAttribute('data-service');
+      
+      if (!serviceDataAttr) {
+        const locationGroup = document.getElementById('calcLocationGroup');
+        const appTypeGroup = document.getElementById('appTypeGroup');
+        const calcButtonGroup = document.getElementById('calcButtonGroup');
+        if (locationGroup) locationGroup.style.display = 'none';
+        if (appTypeGroup) appTypeGroup.style.display = 'none';
+        if (calcButtonGroup) calcButtonGroup.style.display = 'none';
+        if (resultAmount) resultAmount.textContent = 'KES 0';
+        if (resultLocation) resultLocation.textContent = '—';
+        if (resultType) resultType.textContent = '—';
+        if (feeProceedBtn) feeProceedBtn.disabled = true;
+        return;
+      }
+      
+      currentServiceData = JSON.parse(serviceDataAttr);
+      currentServiceName = currentServiceData.name;
+      if (resultService) resultService.textContent = currentServiceName;
+      
+      const availableLocations = currentServiceData.locations || ['meru', 'maua', 'nkubu', 'other'];
+      if (locationSelect) {
+        locationSelect.innerHTML = '<option value="">-- Select Location --</option>';
+        if (availableLocations.includes('meru')) locationSelect.innerHTML += '<option value="meru">Meru Town (CBD)</option>';
+        if (availableLocations.includes('maua')) locationSelect.innerHTML += '<option value="maua">Maua Town</option>';
+        if (availableLocations.includes('nkubu')) locationSelect.innerHTML += '<option value="nkubu">Nkubu Town</option>';
+        if (availableLocations.includes('other')) locationSelect.innerHTML += '<option value="other">Other Sub-Counties</option>';
+        if (availableLocations.includes('all')) locationSelect.innerHTML += '<option value="all">County-Wide (Flat Rate)</option>';
+        const locationGroup = document.getElementById('calcLocationGroup');
+        if (locationGroup) locationGroup.style.display = 'block';
+      }
+      
+      const hasRenewal = hasRenewalFee(currentServiceData);
+      const appTypeGroup = document.getElementById('appTypeGroup');
+      if (appTypeGroup) {
+        if (hasRenewal) {
+          appTypeGroup.style.display = 'block';
+          if (appTypeSelect) {
+            appTypeSelect.disabled = false;
+            appTypeSelect.innerHTML = '<option value="new">New Application</option><option value="renewal">Renewal</option>';
+          }
+        } else {
+          appTypeGroup.style.display = 'none';
+        }
+      }
+      
+      const calcButtonGroup = document.getElementById('calcButtonGroup');
+      if (calcButtonGroup) calcButtonGroup.style.display = 'none';
+      
+      if (resultAmount) resultAmount.textContent = 'KES 0';
+      if (resultLocation) resultLocation.textContent = '—';
+      if (resultType) resultType.textContent = '—';
+      if (feeProceedBtn) feeProceedBtn.disabled = true;
+      
+      if (locationSelect && locationSelect.options.length === 2) {
+        locationSelect.value = 'all';
+        locationSelect.dispatchEvent(new Event('change'));
+      }
+    });
+    
+    locationSelect.addEventListener('change', function() {
+      const calcButtonGroup = document.getElementById('calcButtonGroup');
+      if (this.value) {
+        if (calcButtonGroup) calcButtonGroup.style.display = 'block';
+        autoCalculateFee();
+      } else {
+        if (calcButtonGroup) calcButtonGroup.style.display = 'none';
+        if (resultAmount) resultAmount.textContent = 'KES 0';
+        if (resultLocation) resultLocation.textContent = '—';
+        if (resultType) resultType.textContent = '—';
+        if (feeProceedBtn) feeProceedBtn.disabled = true;
+      }
+    });
+    
+    calculateBtn.addEventListener('click', function() {
+      autoCalculateFee();
+    });
+    
+    function autoCalculateFee() {
+      const location = locationSelect ? locationSelect.value : '';
+      const appType = appTypeSelect ? appTypeSelect.value : 'new';
+      
+      if (!location) {
+        alert('Please select a location');
+        return;
+      }
+      if (!currentServiceData) {
+        alert('Please select a service first');
+        return;
+      }
+      if (!currentServiceData.fees) {
+        alert('Fee information not available for this service.');
+        return;
+      }
+      
+      const amount = getFeeAmount(currentServiceData, location, appType);
+      
+      if (amount === 0 || amount === '0') {
+        alert('Fee information not available for this combination.');
+        return;
+      }
+      
+      const locationText = locationSelect.options[locationSelect.selectedIndex]?.text || location;
+      const typeText = (appTypeSelect && appTypeSelect.options[appTypeSelect.selectedIndex]) 
+        ? appTypeSelect.options[appTypeSelect.selectedIndex].text 
+        : 'New Application';
+      
+      if (resultAmount) resultAmount.textContent = `KES ${amount.toLocaleString()}`;
+      if (resultLocation) resultLocation.textContent = locationText;
+      if (resultType) resultType.textContent = typeText;
+      if (feeProceedBtn) {
+        feeProceedBtn.disabled = false;
+        feeProceedBtn.setAttribute('data-amount', amount);
+        feeProceedBtn.setAttribute('data-desc', currentServiceName);
+        feeProceedBtn.setAttribute('data-location', location);
+        feeProceedBtn.setAttribute('data-type', appType);
+        feeProceedBtn.setAttribute('data-location-text', locationText);
+        feeProceedBtn.setAttribute('data-type-text', typeText);
+      }
+    }
+    
+    feeProceedBtn.addEventListener('click', function() {
+      const amount = this.getAttribute('data-amount');
+      const desc = this.getAttribute('data-desc');
+      const locationText = this.getAttribute('data-location-text');
+      const typeText = this.getAttribute('data-type-text');
+      
+      if (!amount) {
+        alert('Please calculate the fee first.');
+        return;
+      }
+      
+      const confirmMsg = `Payment Details:\n\nService: ${desc}\nLocation: ${locationText}\nType: ${typeText}\nAmount: KES ${parseInt(amount).toLocaleString()}\n\nProceed to MeruPay Portal?`;
+      
+      if (confirm(confirmMsg)) {
+        const customBill = {
+          owner: 'Customer',
+          item: `${desc} (${locationText} - ${typeText})`,
+          amount: parseInt(amount),
+          arrears: 0,
+          ref: 'CALC-' + Math.floor(Math.random() * 90000 + 10000),
+          due: 'Immediate'
+        };
+        mockBills['permit']['CUSTOM-CALC'] = customBill;
+        switchView('portal');
+        setTimeout(() => {
+          const portalRefInput = document.getElementById('portal-ref-input');
+          if (portalRefInput) portalRefInput.value = 'CUSTOM-CALC';
+          const portalSearchForm = document.getElementById('portal-search-form');
+          if (portalSearchForm) portalSearchForm.dispatchEvent(new Event('submit'));
+        }, 100);
+      }
+    });
+  }
+
+  // ==================== PORTAL PAYMENT MODAL FUNCTIONS ====================
+  window.openPortalPaymentModal = function(serviceName, appType, location, reference, amount) {
+    console.log('Opening payment modal:', serviceName, amount);
+    
+    document.getElementById('modal-service-name').textContent = serviceName || 'Service';
+    document.getElementById('modal-app-type').textContent = appType || 'New Application';
+    document.getElementById('modal-location').textContent = location || 'Meru Town';
+    document.getElementById('modal-reference').textContent = reference || 'N/A';
+    document.getElementById('modal-amount').textContent = `KES ${parseInt(amount || 0).toLocaleString()}`;
+    
+    const modal = document.getElementById('portal-payment-modal');
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+    }
+  };
+
+  window.closePortalPaymentModal = function() {
+    const modal = document.getElementById('portal-payment-modal');
+    if (modal) {
+      modal.style.display = 'none';
+      modal.classList.remove('active');
+    }
+  };
+
+  window.confirmPortalPayment = function() {
+    const phoneInput = document.getElementById('portal-payment-phone');
+    const phone = phoneInput ? phoneInput.value.trim() : '';
+    
+    if (!phone) {
+      alert('Please enter your M-Pesa phone number.');
+      return;
+    }
+    
+    if (!/^0(7|1)\d{8}$/.test(phone)) {
+      alert('Please enter a valid Kenyan phone number (e.g., 0712345678).');
+      return;
+    }
+    
+    const serviceName = document.getElementById('modal-service-name').textContent;
+    const amountText = document.getElementById('modal-amount').textContent;
+    const amount = parseInt(amountText.replace(/[^0-9]/g, '')) || 0;
+    
+    alert(`Payment Initiated!\n\nService: ${serviceName}\nAmount: KES ${amount.toLocaleString()}\nPhone: ${phone}\n\nSTK push sent to your phone. Please enter your PIN to complete.`);
+    
+    closePortalPaymentModal();
+    
+    const portalRefInput = document.getElementById('portal-ref-input');
+    if (portalRefInput) portalRefInput.value = '';
+    const portalService = document.getElementById('portal-service');
+    if (portalService) portalService.value = '';
+    
+    document.querySelectorAll('.terminal-state').forEach(s => s.classList.remove('active'));
+    const emptyState = document.getElementById('state-empty');
+    if (emptyState) emptyState.classList.add('active');
+  };
+
+  // ==================== PORTAL AUTO-CALCULATE WITH FINANCE ACT FEES ====================
+  function initPortalCalculator() {
+    const serviceSelect = document.getElementById('portal-service');
+    const appTypeSelect = document.getElementById('portal-app-type');
+    const locationSelect = document.getElementById('portal-location');
+    const refInput = document.getElementById('portal-ref-input');
+    const payBtn = document.getElementById('portal-pay-btn');
+    const previewDiv = document.getElementById('portal-bill-preview');
+    const appTypeGroup = document.getElementById('portal-app-type-group');
+    
+    // Service renewal mapping based on Finance Act 2019
+    const serviceRenewalMap = {
+      'sbp-small': true, 'sbp-medium': true, 'sbp-large': true, 'sbp-mega': true,
+      'kiosk': true, 'hawker': true,
+      'sublet': false, 'change-activity': false,
+      'parking-moto': false, 'parking-car': false, 'parking-matatu': false,
+      'parking-bus': false, 'parking-lorry': false, 'parking-trailer': false,
+      'parking-fine': false, 'impounding': false,
+      'plot-boundary': false, 'plot-demarcation': false, 'occupation-permit': false,
+      'change-user': false, 'consent-transfer': false, 'clearance-cert': false,
+      'food-retail': true, 'food-butchery': true, 'food-bakery': true,
+      'food-supermarket': true, 'health-hotel': true,
+      'medical-clinic': true, 'pharmacy': true, 'vaccination': false,
+      'cabbages': false, 'bananas': false, 'miraa-pickup': false,
+      'miraa-lorry': false, 'charcoal': false, 'timber-pickup': false,
+      'timber-trailer': false, 'meat-cattle': false, 'slaughter': true,
+      'building-46': false, 'building-93': false, 'building-140': false,
+      'building-186': false, 'building-279': false, 'building-structural': false,
+      'late-submission': false,
+      'alcohol-retail-meru': true, 'alcohol-retail-other': true,
+      'alcohol-bar-meru': true, 'alcohol-bar-other': true,
+      'alcohol-night-meru': true, 'alcohol-night-other': true,
+      'wines-spirits': true, 'temporary-license': false,
+      'waste-small': false, 'waste-medium': false, 'waste-large': false,
+      'waste-residential': false, 'illegal-dumping': false
+    };
+    
+    // Finance Act 2019 fee mapping with renewal fees
+    const portalServiceFees = {
+      // Business & Trade - Finance Act 2019, Thirteenth Schedule
+      'sbp-small': { new: { meru: 3400, maua: 2000, nkubu: 2000, other: 2000 }, renewal: { meru: 2000, maua: 1000, nkubu: 1000, other: 1000 } },
+      'sbp-medium': { new: { meru: 7000, maua: 4000, nkubu: 4000, other: 4000 }, renewal: { meru: 4000, maua: 2500, nkubu: 2500, other: 2500 } },
+      'sbp-large': { new: { meru: 14000, maua: 10000, nkubu: 10000, other: 8000 }, renewal: { meru: 7000, maua: 5000, nkubu: 5000, other: 4000 } },
+      'sbp-mega': { new: { meru: 50000, maua: 30000, nkubu: 30000, other: 24000 }, renewal: { meru: 25000, maua: 15000, nkubu: 15000, other: 12000 } },
+      'kiosk': { new: { meru: 2700, maua: 1600, nkubu: 1600, other: 1500 }, renewal: { meru: 1350, maua: 800, nkubu: 800, other: 750 } },
+      'hawker': { new: { meru: 3500, maua: 2000, nkubu: 2000, other: 2000 }, renewal: { meru: 1750, maua: 1000, nkubu: 1000, other: 1000 } },
+      'sublet': { new: { meru: 2000, maua: 2000, nkubu: 2000, other: 2000 } },
+      'change-activity': { new: { meru: 2000, maua: 2000, nkubu: 2000, other: 2000 } },
+      
+      // Transport & Parking - Finance Act 2019, Third Schedule
+      'parking-moto': { new: { all: 20 } },
+      'parking-car': { new: { all: 50 } },
+      'parking-matatu': { new: { all: 100 } },
+      'parking-bus': { new: { all: 200 } },
+      'parking-lorry': { new: { all: 250 } },
+      'parking-trailer': { new: { all: 300 } },
+      'parking-fine': { new: { all: 10000 } },
+      'impounding': { new: { all: 3000 } },
+      
+      // Land & Property - Finance Act 2019, Eighth Schedule
+      'plot-boundary': { new: { all: 500 } },
+      'plot-demarcation': { new: { all: 3000 } },
+      'occupation-permit': { new: { all: 4000 } },
+      'change-user': { new: { all: 20000 } },
+      'consent-transfer': { new: { all: 6000 } },
+      'clearance-cert': { new: { all: 4000 } },
+      
+      // Health & Licensing - Finance Act 2019, Eleventh Schedule
+      'food-retail': { new: { all: 300 }, renewal: { all: 300 } },
+      'food-butchery': { new: { all: 600 }, renewal: { all: 600 } },
+      'food-bakery': { new: { all: 3000 }, renewal: { all: 3000 } },
+      'food-supermarket': { new: { all: 5000 }, renewal: { all: 5000 } },
+      'health-hotel': { new: { all: 6000 }, renewal: { all: 6000 } },
+      'medical-clinic': { new: { all: 4000 }, renewal: { all: 2000 } },
+      'pharmacy': { new: { all: 4000 }, renewal: { all: 2000 } },
+      'vaccination': { new: { all: 1000 } },
+      
+      // Agriculture - Finance Act 2019, Part III of Second Schedule
+      'cabbages': { new: { all: 20 } },
+      'bananas': { new: { all: 20 } },
+      'miraa-pickup': { new: { all: 1000 } },
+      'miraa-lorry': { new: { all: 2000 } },
+      'charcoal': { new: { all: 20 } },
+      'timber-pickup': { new: { all: 500 } },
+      'timber-trailer': { new: { all: 5000 } },
+      'meat-cattle': { new: { all: 100 } },
+      'slaughter': { new: { all: 6000 } },
+      
+      // Construction - Finance Act 2019, Sixth Schedule
+      'building-46': { new: { all: 1000 } },
+      'building-93': { new: { all: 2000 } },
+      'building-140': { new: { all: 3000 } },
+      'building-186': { new: { all: 4000 } },
+      'building-279': { new: { all: 5000 } },
+      'building-structural': { new: { all: 4000 } },
+      'late-submission': { new: { all: 3500 } },
+      
+      // Alcohol - Finance Act 2019, Part IV
+      'alcohol-retail-meru': { new: { meru: 35000, maua: 35000 }, renewal: { meru: 30000, maua: 30000 } },
+      'alcohol-retail-other': { new: { nkubu: 20000, other: 20000 }, renewal: { nkubu: 15000, other: 15000 } },
+      'alcohol-bar-meru': { new: { meru: 45000, maua: 45000 }, renewal: { meru: 40000, maua: 40000 } },
+      'alcohol-bar-other': { new: { nkubu: 35000, other: 35000 }, renewal: { nkubu: 30000, other: 30000 } },
+      'alcohol-night-meru': { new: { meru: 105000, maua: 105000 }, renewal: { meru: 100000, maua: 100000 } },
+      'alcohol-night-other': { new: { nkubu: 55000, other: 55000 }, renewal: { nkubu: 50000, other: 50000 } },
+      'wines-spirits': { new: { meru: 29000, maua: 29000, nkubu: 20000, other: 20000 }, renewal: { meru: 24000, maua: 24000, nkubu: 15000, other: 15000 } },
+      'temporary-license': { new: { all: 11000 } },
+      
+      // Waste - Finance Act 2019, Fourth Schedule
+      'waste-small': { new: { meru: 2000, maua: 1000, nkubu: 1000, other: 1000 } },
+      'waste-medium': { new: { meru: 5000, maua: 2000, nkubu: 2000, other: 2000 } },
+      'waste-large': { new: { meru: 15000, maua: 3000, nkubu: 3000, other: 3000 } },
+      'waste-residential': { new: { meru: 7000, maua: 1000, nkubu: 1000, other: 1000 } },
+      'illegal-dumping': { new: { all: 50000 } }
+    };
+    
+    function updatePreview() {
+      if (!serviceSelect) return;
+      
+      const selectedOption = serviceSelect.options[serviceSelect.selectedIndex];
+      const serviceValue = selectedOption ? selectedOption.value : '';
+      const hasRenewal = serviceRenewalMap[serviceValue] || false;
+      const serviceName = selectedOption ? selectedOption.text : '';
+      const appType = appTypeSelect ? appTypeSelect.value : 'new';
+      const location = locationSelect ? locationSelect.value : 'meru';
+      const reference = refInput ? refInput.value.trim() : '';
+      
+      // Show/hide application type based on hasRenewal
+      if (appTypeGroup) {
+        appTypeGroup.style.display = hasRenewal ? 'block' : 'none';
+      }
+      
+      if (reference && serviceValue && portalServiceFees[serviceValue]) {
+        const feeData = portalServiceFees[serviceValue];
+        let fee = 0;
+        
+        if (appType === 'renewal' && feeData.renewal) {
+          if (feeData.renewal.all !== undefined) {
+            fee = feeData.renewal.all;
+          } else if (feeData.renewal[location]) {
+            fee = feeData.renewal[location];
+          } else if (feeData.new && feeData.new[location]) {
+            fee = feeData.new[location];
+          }
+        } else if (feeData.new) {
+          if (feeData.new.all !== undefined) {
+            fee = feeData.new.all;
+          } else if (feeData.new[location]) {
+            fee = feeData.new[location];
+          }
+        }
+        
+        if (fee > 0) {
+          const previewService = document.getElementById('preview-service-name');
+          const previewAppType = document.getElementById('preview-app-type');
+          const previewLocation = document.getElementById('preview-location-name');
+          const previewAmount = document.getElementById('preview-amount');
+          
+          if (previewService) previewService.textContent = serviceName;
+          if (previewAppType) previewAppType.textContent = appType === 'new' ? 'New Application' : 'Renewal';
+          if (previewLocation) previewLocation.textContent = locationSelect.options[locationSelect.selectedIndex]?.text || 'Meru Town';
+          if (previewAmount) previewAmount.textContent = `KES ${fee.toLocaleString()}`;
+          if (previewDiv) previewDiv.style.display = 'block';
+          if (payBtn) {
+            payBtn.disabled = false;
+            payBtn.setAttribute('data-service', serviceName);
+            payBtn.setAttribute('data-app-type', appType);
+            payBtn.setAttribute('data-location', locationSelect.options[locationSelect.selectedIndex]?.text || 'Meru Town');
+            payBtn.setAttribute('data-reference', reference);
+            payBtn.setAttribute('data-amount', fee);
+          }
+        } else {
+          if (previewDiv) previewDiv.style.display = 'none';
+          if (payBtn) payBtn.disabled = true;
+        }
+      } else {
+        if (previewDiv) previewDiv.style.display = 'none';
+        if (payBtn) payBtn.disabled = true;
+      }
+    }
+    
+    if (serviceSelect) {
+      serviceSelect.addEventListener('change', updatePreview);
+      setTimeout(updatePreview, 100);
+    }
+    if (appTypeSelect) appTypeSelect.addEventListener('change', updatePreview);
+    if (locationSelect) locationSelect.addEventListener('change', updatePreview);
+    if (refInput) refInput.addEventListener('input', updatePreview);
+    
+    if (payBtn) {
+      payBtn.addEventListener('click', function() {
+        const service = this.getAttribute('data-service');
+        const appType = this.getAttribute('data-app-type');
+        const location = this.getAttribute('data-location');
+        const reference = this.getAttribute('data-reference');
+        const amount = this.getAttribute('data-amount');
+        
+        if (!service || !amount) {
+          alert('Please complete all required fields.');
+          return;
+        }
+        
+        openPortalPaymentModal(service, appType, location, reference, amount);
+      });
+    }
+  }
+
+  // ==================== PAYMENT MODAL FUNCTIONS ====================
+  window.showPaymentModal = function(serviceName, itemData) {
+    currentPaymentItem = itemData;
+    currentPaymentName = serviceName;
+    
+    const locationSelect = document.getElementById('payment-location');
+    const typeSelect = document.getElementById('payment-type');
+    const typeGroup = document.querySelector('.payment-form-group:has(#payment-type)');
+    const pricePreview = document.getElementById('payment-price-preview');
+    const confirmBtn = document.getElementById('confirm-payment-btn');
+    const serviceNameElem = document.getElementById('payment-service-name');
+    const serviceDescElem = document.getElementById('payment-service-description');
+    
+    if (locationSelect) {
+      locationSelect.innerHTML = '<option value="">-- Select Location --</option>';
+      const availableLocations = itemData.locations || ['meru', 'maua', 'nkubu', 'other'];
+      if (availableLocations.includes('meru')) locationSelect.innerHTML += '<option value="meru">Meru Town (CBD)</option>';
+      if (availableLocations.includes('maua')) locationSelect.innerHTML += '<option value="maua">Maua Town</option>';
+      if (availableLocations.includes('nkubu')) locationSelect.innerHTML += '<option value="nkubu">Nkubu Town</option>';
+      if (availableLocations.includes('other')) locationSelect.innerHTML += '<option value="other">Other Sub-Counties</option>';
+      if (availableLocations.includes('all')) locationSelect.innerHTML = '<option value="all">County-Wide (Flat Rate)</option>';
+      locationSelect.value = '';
+    }
+    
+    if (typeSelect) typeSelect.value = '';
+    if (pricePreview) pricePreview.style.display = 'none';
+    if (confirmBtn) confirmBtn.disabled = true;
+    if (serviceNameElem) serviceNameElem.textContent = serviceName;
+    
+    const hasRenewal = hasRenewalFee(itemData);
+    if (typeGroup) {
+      typeGroup.style.display = hasRenewal ? 'block' : 'none';
+    }
+    
+    if (serviceDescElem) {
+      if (hasRenewal) {
+        serviceDescElem.innerHTML = `Complete the details below to pay for ${serviceName}.<br>Fees vary by location and application type (New/Renewal).`;
+      } else {
+        serviceDescElem.innerHTML = `Complete the details below to pay for ${serviceName}.<br>Fees vary by location. This service has a flat fee (no renewal discount).`;
+      }
+    }
+    
+    const modal = document.getElementById('payment-modal');
+    if (modal) modal.classList.add('active');
+  };
+  
+  window.closePaymentModal = function() {
+    const modal = document.getElementById('payment-modal');
+    if (modal) modal.classList.remove('active');
+    currentPaymentItem = null;
+    currentPaymentName = null;
+  };
+  
+  window.previewFee = function() {
+    const locationSelect = document.getElementById('payment-location');
+    const typeSelect = document.getElementById('payment-type');
+    const pricePreview = document.getElementById('payment-price-preview');
+    const confirmBtn = document.getElementById('confirm-payment-btn');
+    const location = locationSelect ? locationSelect.value : '';
+    let type = 'new';
+    const hasRenewal = hasRenewalFee(currentPaymentItem);
+    
+    if (hasRenewal && typeSelect) {
+      type = typeSelect.value;
+      if (!type) {
+        alert('Please select application type');
+        return;
+      }
+    }
+    if (!location) {
+      alert('Please select location');
+      return;
+    }
+    
+    const amount = getFeeAmount(currentPaymentItem, location, type);
+    if (amount === 0) {
+      alert('Fee information not available for this combination.');
+      return;
+    }
+    
+    const previewBaseFee = document.getElementById('preview-base-fee');
+    const previewLocation = document.getElementById('preview-location');
+    const previewType = document.getElementById('preview-type');
+    const previewTotal = document.getElementById('preview-total');
+    
+    const locationText = locationSelect.options[locationSelect.selectedIndex]?.text || location;
+    const typeText = (hasRenewal && typeSelect && typeSelect.options[typeSelect.selectedIndex]) 
+      ? typeSelect.options[typeSelect.selectedIndex].text 
+      : 'New Application';
+    
+    if (previewBaseFee) previewBaseFee.textContent = `KES ${amount.toLocaleString()}`;
+    if (previewLocation) previewLocation.textContent = locationText;
+    if (previewType) previewType.textContent = typeText;
+    if (previewTotal) previewTotal.textContent = `KES ${amount.toLocaleString()}`;
+    if (pricePreview) pricePreview.style.display = 'block';
+    if (confirmBtn) confirmBtn.disabled = false;
+    
+    window.calculatedPaymentAmount = amount;
+    window.calculatedPaymentLocation = location;
+    window.calculatedPaymentType = type;
+  };
+  
+  window.confirmPayment = function() {
+    const amount = window.calculatedPaymentAmount;
+    const location = window.calculatedPaymentLocation;
+    const type = window.calculatedPaymentType;
+    const serviceName = currentPaymentName;
+    
+    if (!amount) {
+      alert('Please preview the fee before confirming payment.');
+      return;
+    }
+    
+    const locationSelect = document.getElementById('payment-location');
+    const typeSelect = document.getElementById('payment-type');
+    const locationText = locationSelect?.options[locationSelect.selectedIndex]?.text || location;
+    let typeText = 'New Application';
+    if (hasRenewalFee(currentPaymentItem) && typeSelect && typeSelect.options[typeSelect.selectedIndex]) {
+      typeText = typeSelect.options[typeSelect.selectedIndex].text;
+    }
+    
+    const confirmMsg = `Payment Details:\n\nService: ${serviceName}\nLocation: ${locationText}\nType: ${typeText}\nAmount: KES ${amount.toLocaleString()}\n\nProceed to MeruPay Portal?`;
+    if (confirm(confirmMsg)) {
+      closePaymentModal();
+      const customBill = {
+        owner: 'Customer',
+        item: `${serviceName} (${locationText} - ${typeText})`,
+        amount: amount,
+        arrears: 0,
+        ref: 'PYMT-' + Math.floor(Math.random() * 90000 + 10000),
+        due: 'Immediate'
+      };
+      mockBills['permit']['CUSTOM-PYMT'] = customBill;
+      switchView('portal');
+      setTimeout(() => {
+        const portalRefInput = document.getElementById('portal-ref-input');
+        if (portalRefInput) portalRefInput.value = 'CUSTOM-PYMT';
+        const portalSearchForm = document.getElementById('portal-search-form');
+        if (portalSearchForm) portalSearchForm.dispatchEvent(new Event('submit'));
+      }, 100);
+    }
+  };
+
+  // Function to load category services
+  window.loadCategoryServices = function(category) {
+    const gridId = `${category}ServicesGrid`;
+    const container = document.getElementById(gridId);
+    if (!container) return;
+    const categoryData = categoryServicesData[category];
+    if (!categoryData) return;
+    container.innerHTML = '';
+    categoryData.items.forEach(item => {
+      let baseFee = '';
+      if (item.fees) {
+        if (item.fees.all !== undefined) {
+          if (typeof item.fees.all === 'string') {
+            baseFee = `<div class="service-price"><span class="price-badge">${item.fees.all}</span></div>`;
+          } else {
+            baseFee = `<div class="service-price"><span class="price-badge all">KES ${item.fees.all.toLocaleString()}</span></div>`;
+          }
+        } else {
+          const locationFees = [];
+          if (item.fees.meru) locationFees.push(item.fees.meru);
+          if (item.fees.maua) locationFees.push(item.fees.maua);
+          if (item.fees.nkubu) locationFees.push(item.fees.nkubu);
+          if (item.fees.other) locationFees.push(item.fees.other);
+          const minFee = Math.min(...locationFees);
+          baseFee = `<div class="service-price"><span class="price-badge all">Starting from KES ${minFee.toLocaleString()}</span></div>`;
+        }
+      }
+      const serviceCard = document.createElement('div');
+      serviceCard.className = 'service-card';
+      serviceCard.innerHTML = `
+        <div class="service-card-header">
+          <div class="service-card-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></div>
+          <span class="service-card-badge">Service Fee</span>
+        </div>
+        <h3>${item.name}</h3>
+        ${baseFee}
+        <div class="service-actions">
+          <button class="btn-service-action" onclick="payForService('${item.name.replace(/'/g, "\\'")}', ${JSON.stringify(item).replace(/"/g, '&quot;')})">Pay Now</button>
+          <button class="btn-service-action calculate" onclick="calculateServiceFee(${JSON.stringify(item).replace(/"/g, '&quot;')})">Calculate</button>
+        </div>
+      `;
+      container.appendChild(serviceCard);
+    });
+  };
+  
+  window.payForService = function(serviceName, itemData) {
+    showPaymentModal(serviceName, itemData);
+  };
+  
+  window.calculateServiceFee = function(itemData) {
+    switchView('calculator');
+    setTimeout(() => {
+      const categorySelect = document.getElementById('serviceCategory');
+      let foundCategory = null;
+      for (const [catKey, catData] of Object.entries(categoryServicesData)) {
+        if (catData.items.some(item => item.name === itemData.name)) {
+          foundCategory = catKey;
+          break;
+        }
+      }
+      if (foundCategory && categorySelect) {
+        categorySelect.value = foundCategory;
+        categorySelect.dispatchEvent(new Event('change'));
+        setTimeout(() => {
+          const specificService = document.getElementById('specificService');
+          if (specificService) {
+            for (let i = 0; i < specificService.options.length; i++) {
+              if (specificService.options[i].value === itemData.name) {
+                specificService.selectedIndex = i;
+                specificService.dispatchEvent(new Event('change'));
+                break;
+              }
+            }
+          }
+        }, 300);
+      }
+    }, 400);
+  };
+
+  function initCategoryViewButtons() {
+    const viewButtons = document.querySelectorAll('.btn-view-category');
+    viewButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const category = btn.getAttribute('data-category');
+        if (category && categoryServicesData[category]) {
+          loadCategoryServices(category);
+          switchView(`${category}-services`);
+        }
+      });
+    });
+  }
+  
+  function initBackButtons() {
+    const backButtons = document.querySelectorAll('.back-to-services');
+    backButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        switchView('services-page');
+      });
+    });
+  }
+
+  // --- THEME & NAVIGATION ---
+  document.documentElement.setAttribute('data-theme', currentTheme);
+  if (window.lucide) window.lucide.createIcons();
+
   const themeToggleBtn = document.getElementById('theme-toggle-btn');
+  function updateThemeIcon() {
+    if (themeToggleBtn) {
+      if (currentTheme === 'dark') {
+        themeToggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sun"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`;
+      } else {
+        themeToggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-moon"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`;
+      }
+    }
+  }
   updateThemeIcon();
+
   const navLinks = document.querySelectorAll('.nav-link');
-  const mobileToggle = document.getElementById('mobile-toggle'); // DEPRECATED
-  const navMenu = document.getElementById('nav-menu'); // DEPRECATED
-  const header = document.querySelector('header'); // DEPRECATED
   const views = document.querySelectorAll('.tab-content');
   const quickPortalBtn = document.getElementById('quick-portal-btn');
   const heroPortalBtn = document.getElementById('hero-portal-btn');
   const heroCalcBtn = document.getElementById('hero-calc-btn');
 
-  // --- SCROLL EFFECTS ---
+  const header = document.querySelector('header');
   window.addEventListener('scroll', () => {
     if (window.scrollY > 20) {
       if(header) header.classList.add('scrolled');
@@ -91,29 +955,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // --- MOBILE NAVIGATION ---
-  if(mobileToggle) mobileToggle.addEventListener('click', () => {
-    navMenu.classList.toggle('active');
-    const isExpanded = navMenu.classList.contains('active');
-    mobileToggle.innerHTML = isExpanded ? '✕' : '☰';
-  });
-
-  // Close mobile menu on nav link click
-  navLinks.forEach(link => {
-    link.addEventListener('click', () => {
-      if(navMenu) navMenu.classList.remove('active');
-      if(mobileToggle) mobileToggle.innerHTML = '☰';
-    });
-  });
-
-  // --- VIEW NAVIGATION SYSTEM ---
   function switchView(targetViewId) {
     if (!isAuthenticated && protectedViews.includes(targetViewId)) {
       alert('Please sign in or register before accessing MeruPay services.');
       targetViewId = 'login';
     }
 
-    // Update Nav Active State
     navLinks.forEach(link => {
       if (link.getAttribute('data-tab') === targetViewId) {
         link.classList.add('active');
@@ -122,19 +969,29 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // Scroll to target section instead of hiding others
-    const targetSection = document.getElementById(`${targetViewId}-view`);
-    if (targetSection) {
-      targetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    views.forEach(view => view.classList.remove('active'));
 
-    // Handle view-specific initializations
-    if (targetViewId === 'home') {
-      animateCounters();
+    let targetSectionId = targetViewId;
+    if (targetViewId === 'services-page') targetSectionId = 'services-page-view';
+    else if (targetViewId === 'business-services') targetSectionId = 'business-services-view';
+    else if (targetViewId === 'transport-services') targetSectionId = 'transport-services-view';
+    else if (targetViewId === 'land-services') targetSectionId = 'land-services-view';
+    else if (targetViewId === 'health-services') targetSectionId = 'health-services-view';
+    else if (targetViewId === 'agriculture-services') targetSectionId = 'agriculture-services-view';
+    else if (targetViewId === 'construction-services') targetSectionId = 'construction-services-view';
+    else if (targetViewId === 'alcohol-services') targetSectionId = 'alcohol-services-view';
+    else if (targetViewId === 'waste-services') targetSectionId = 'waste-services-view';
+    else targetSectionId = targetViewId + '-view';
+
+    const targetSection = document.getElementById(targetSectionId);
+    if (targetSection) {
+      targetSection.classList.add('active');
+      targetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      window.location.hash = targetViewId;
     }
+    if (targetViewId === 'home') animateCounters();
   }
 
-  // Bind Nav Links Click Events
   navLinks.forEach(link => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
@@ -143,7 +1000,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Bind all quick tab links that use data-tab attributes
   document.querySelectorAll('a[data-tab]').forEach(link => {
     if (link.classList.contains('nav-link')) return;
     link.addEventListener('click', (e) => {
@@ -153,31 +1009,98 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Bind Quick Navigation Buttons
+  document.querySelectorAll('button[data-tab]:not(.btn-login):not(.btn-register)').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const tabId = btn.getAttribute('data-tab');
+      if (tabId) switchView(tabId);
+    });
+  });
+
+  const menuBtn = document.getElementById('menuBtn');
+  const dropdownMenu = document.getElementById('dropdownMenu');
+  const mobileMenuOpen = document.getElementById('mobile-menu-open');
+
+  function closeDropdown() {
+    if (dropdownMenu) dropdownMenu.classList.remove('show');
+    if (menuBtn) menuBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  function toggleDropdown() {
+    if (!dropdownMenu) return;
+    const isOpen = dropdownMenu.classList.toggle('show');
+    if (menuBtn) menuBtn.setAttribute('aria-expanded', isOpen);
+  }
+
+  if (menuBtn && dropdownMenu) {
+    menuBtn.setAttribute('aria-expanded', 'false');
+    menuBtn.setAttribute('aria-haspopup', 'true');
+    menuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleDropdown();
+    });
+    dropdownMenu.querySelectorAll('.dropdown-link').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const tabId = link.getAttribute('data-tab');
+        closeDropdown();
+        if (tabId) switchView(tabId);
+      });
+    });
+  }
+
+  if (mobileMenuOpen && dropdownMenu) {
+    mobileMenuOpen.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdownMenu.classList.add('show');
+      if (menuBtn) menuBtn.setAttribute('aria-expanded', 'true');
+    });
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!dropdownMenu || !dropdownMenu.classList.contains('show')) return;
+    const clickedInside = dropdownMenu.contains(e.target) ||
+      (menuBtn && menuBtn.contains(e.target)) ||
+      (mobileMenuOpen && mobileMenuOpen.contains(e.target));
+    if (!clickedInside) closeDropdown();
+  });
+
+  const signInBtn = document.querySelector('.btn-login');
+  const registerBtn = document.querySelector('.btn-register');
+
+  if (signInBtn) {
+    signInBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeDropdown();
+      switchView('login');
+      setTimeout(() => document.getElementById('citizenId')?.focus(), 350);
+    });
+  }
+
+  if (registerBtn) {
+    registerBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeDropdown();
+      switchView('register');
+      setTimeout(() => document.getElementById('regFirstName')?.focus(), 350);
+    });
+  }
+
   const heroServicesBtn = document.getElementById('hero-services-btn');
-  if (heroServicesBtn) heroServicesBtn.addEventListener('click', (e) => { e.preventDefault(); switchView('services'); });
+  if (heroServicesBtn) heroServicesBtn.addEventListener('click', (e) => { e.preventDefault(); switchView('services-page'); });
   if (quickPortalBtn) quickPortalBtn.addEventListener('click', (e) => { e.preventDefault(); switchView('portal'); });
   if (heroPortalBtn) heroPortalBtn.addEventListener('click', (e) => { e.preventDefault(); switchView('portal'); });
   if (heroCalcBtn) heroCalcBtn.addEventListener('click', (e) => { e.preventDefault(); switchView('calculator'); });
 
-  // --- LIGHT / DARK MODE ---
-  themeToggleBtn.addEventListener('click', () => {
-    currentTheme = currentTheme === 'light' ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', currentTheme);
-    localStorage.setItem('theme', currentTheme);
-    updateThemeIcon();
-  });
-
-  function updateThemeIcon() {
-    if (currentTheme === 'dark') {
-      themeToggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sun"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`;
-    } else {
-      themeToggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-moon"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`;
-    }
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+      currentTheme = currentTheme === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', currentTheme);
+      localStorage.setItem('theme', currentTheme);
+      updateThemeIcon();
+    });
   }
 
-
-  // ── Login Tabs & Registration Toggling ─────────────────────────
   const loginTabBtns = document.querySelectorAll('.login-tab-btn');
   const loginFormViews = document.querySelectorAll('.login-form-view');
   
@@ -185,7 +1108,6 @@ document.addEventListener('DOMContentLoaded', () => {
     loginTabBtns.forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
-        // Update styling
         loginTabBtns.forEach(b => {
           b.classList.remove('active');
           b.style.color = 'var(--text-color-light)';
@@ -194,8 +1116,6 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.classList.add('active');
         btn.style.color = 'var(--primary-color)';
         btn.style.borderBottomColor = 'var(--primary-color)';
-        
-        // Toggle forms
         const targetId = btn.getAttribute('data-target');
         loginFormViews.forEach(form => {
           if (form.id === targetId) {
@@ -207,7 +1127,6 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
 
-    // Wire up Register / Login links
     document.querySelectorAll('.register-link').forEach(link => {
       link.addEventListener('click', (e) => { e.preventDefault(); switchView('register'); });
     });
@@ -215,13 +1134,11 @@ document.addEventListener('DOMContentLoaded', () => {
       link.addEventListener('click', (e) => { e.preventDefault(); switchView('login'); });
     });
     
-    // Login handler that requires credentials and unlocks service access
     document.querySelectorAll('.login-action-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const form = btn.closest('form');
         const idInput = form.querySelector('input[type="text"]');
         const pwdInput = form.querySelector('input[type="password"]');
-
         if (idInput && pwdInput && idInput.value.trim() !== '' && pwdInput.value.trim() !== '') {
           isAuthenticated = true;
           alert('Login successful. You may now access MeruPay services.');
@@ -232,7 +1149,6 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
 
-    // Registration complete handler that activates user session
     const registrationForm = document.getElementById('registration-form');
     if (registrationForm) {
       const registerBtn = registrationForm.querySelector('button[type="button"]');
@@ -253,63 +1169,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-
-  // Mobile sidebar toggle logic
-  const sidebar = document.getElementById('sidebar');
-  const sidebarOpen = document.getElementById('sidebar-open');
-  const sidebarClose = document.getElementById('sidebar-close');
-  
-  if(sidebar && sidebarOpen && sidebarClose) {
-      sidebarOpen.addEventListener('click', () => {
-          sidebar.classList.add('sidebar-open');
-      });
-      sidebarClose.addEventListener('click', () => {
-          sidebar.classList.remove('sidebar-open');
-      });
-      // Automatically close sidebar when scrolling on mobile to prevent it from hiding content
-      window.addEventListener('scroll', () => {
-          if (window.innerWidth <= 992 && sidebar.classList.contains('sidebar-open')) {
-              sidebar.classList.remove('sidebar-open');
-          }
-      });
-      // Close sidebar when a nav link is clicked on mobile
-      document.querySelectorAll('#sidebar-nav-links .nav-link').forEach(link => {
-          link.addEventListener('click', () => {
-              if (window.innerWidth <= 992) {
-                  sidebar.classList.remove('sidebar-open');
-              }
-          });
-      });
-  }
-
-  // --- STATS COUNTERS ---
   let countersAnimated = false;
   function animateCounters() {
     if (countersAnimated) return;
     const counters = document.querySelectorAll('.stat-num');
-    
     counters.forEach(counter => {
       const target = parseFloat(counter.getAttribute('data-target'));
       const suffix = counter.getAttribute('data-suffix') || '';
       const isDecimal = counter.getAttribute('data-decimal') === 'true';
       let start = 0;
-      const duration = 2000; // 2 seconds
+      const duration = 2000;
       const startTime = performance.now();
-
       function updateCounter(currentTime) {
         const elapsedTime = currentTime - startTime;
         const progress = Math.min(elapsedTime / duration, 1);
-        
-        // Easing out quadratic
         const easeProgress = progress * (2 - progress);
         const currentVal = start + easeProgress * (target - start);
-        
         if (isDecimal) {
           counter.textContent = currentVal.toFixed(1) + suffix;
         } else {
           counter.textContent = Math.floor(currentVal).toLocaleString() + suffix;
         }
-
         if (progress < 1) {
           requestAnimationFrame(updateCounter);
         } else {
@@ -324,1037 +1204,86 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     countersAnimated = true;
   }
-  
-  // Trigger counters initially since homepage is active by default
   setTimeout(animateCounters, 500);
 
-  // --- SERVICES VIEW DETAILS TAB ---
-  const serviceTabBtns = document.querySelectorAll('.service-tab-btn');
-  const serviceCards = document.querySelectorAll('.service-card');
+  initCategoryViewButtons();
+  initBackButtons();
+  initCalculator();
+  initPortalCalculator();
 
-  serviceTabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      serviceTabBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-
-      const filter = btn.getAttribute('data-filter');
-      serviceCards.forEach(card => {
-        if (filter === 'all' || card.getAttribute('data-category') === filter) {
-          card.style.display = 'flex';
-        } else {
-          card.style.display = 'none';
-        }
-      });
-    });
-  });
-
-  // SBP Service actions (Pay/Calculate links)
-  document.querySelectorAll('.btn-service-action').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const action = btn.getAttribute('data-action');
-      if (action === 'calculate') {
-        switchView('calculator');
-      } else if (action === 'pay') {
-        const type = btn.getAttribute('data-type');
-        switchView('portal');
-        if (type) {
-          document.querySelector(`.portal-tab-btn[data-type="${type}"]`).click();
-        }
-      }
-    });
-  });
-
-  // ============================================================
-  // LEGACY SBP CALCULATOR (top form on calculator tab)
-  // ============================================================
-  const calcForm = document.getElementById('permit-calc-form');
-  const radioBoxes = document.querySelectorAll('.radio-box');
+  // Payment Modal Event Listeners
+  const previewBtn = document.getElementById('preview-fee-btn');
+  const confirmPayBtn = document.getElementById('confirm-payment-btn');
+  const modalCloseBtn = document.querySelector('.payment-modal-close');
+  const modalOverlay = document.getElementById('payment-modal');
   
-  radioBoxes.forEach(box => {
-    box.addEventListener('click', () => {
-      const parent = box.closest('.radio-group');
-      parent.querySelectorAll('.radio-box').forEach(b => b.classList.remove('selected'));
-      box.classList.add('selected');
-      box.querySelector('input').checked = true;
-    });
-  });
-
-  if (calcForm) {
-    calcForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const sector   = document.getElementById('calc-sector').value;
-      const employees = document.querySelector('input[name="employees"]:checked').value;
-      const zone     = document.getElementById('calc-zone').value;
-
-      const sectorMap = {
-        retail:        { name: 'General Trade, Retail & Shops',                  base: 5000  },
-        agriculture:   { name: 'Agribusiness, Coffee & Tea Stores',              base: 3500  },
-        transport:     { name: 'Transport, Taxi & Matatu Operators',             base: 7000  },
-        hospitality:   { name: 'Hospitality, Hotels & Restaurants',              base: 9000  },
-        professional:  { name: 'Professional Services, Clinics & Consultancy',   base: 8000  },
-        manufacturing: { name: 'Manufacturing, Processing & Heavy Industry',     base: 12000 },
-      };
-      const sizeMap = {
-        micro:  { label: 'Micro Enterprise (< 5 employees)',   mult: 1.0, garbage: 1000 },
-        small:  { label: 'Small Enterprise (5 – 20 employees)',mult: 1.7, garbage: 1500 },
-        medium: { label: 'Medium Enterprise (21 – 50)',        mult: 2.8, garbage: 3000 },
-        large:  { label: 'Large Enterprise (> 50)',            mult: 4.5, garbage: 6000 },
-      };
-      const zoneMap = {
-        'urban':      { label: 'Urban Zone A (Meru CBD, Nkubu)', mult: 1.25 },
-        'peri-urban': { label: 'Peri-Urban Zone B (Maua, Timau)', mult: 1.0 },
-        'rural':      { label: 'Rural Zone C (Other Sub-counties)', mult: 0.8 },
-      };
-
-      const s = sectorMap[sector];
-      const z = sizeMap[employees];
-      const zn = zoneMap[zone];
-      const calculatedSBP = s.base * z.mult * zn.mult;
-      const fireFee = 2000;
-      const total = calculatedSBP + z.garbage + fireFee;
-
-      document.getElementById('inv-sector').textContent  = s.name;
-      document.getElementById('inv-size').textContent    = z.label;
-      document.getElementById('inv-zone').textContent    = zn.label;
-      document.getElementById('inv-sbp').textContent     = 'KES ' + Math.round(calculatedSBP).toLocaleString();
-      document.getElementById('inv-garbage').textContent = 'KES ' + z.garbage.toLocaleString();
-      document.getElementById('inv-fire').textContent    = 'KES ' + fireFee.toLocaleString();
-      document.getElementById('inv-total').textContent   = 'KES ' + Math.round(total).toLocaleString();
-
-      const payBtn = document.getElementById('inv-pay-btn');
-      payBtn.disabled = false;
-      payBtn.setAttribute('data-amount', Math.round(total));
-      payBtn.setAttribute('data-desc', `SBP Renewal – ${s.name} (${z.label})`);
+  if (previewBtn) previewBtn.addEventListener('click', window.previewFee);
+  if (confirmPayBtn) confirmPayBtn.addEventListener('click', window.confirmPayment);
+  if (modalCloseBtn) modalCloseBtn.addEventListener('click', window.closePaymentModal);
+  if (modalOverlay) {
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) window.closePaymentModal();
     });
   }
 
-  const invPayBtn = document.getElementById('inv-pay-btn');
-  if (invPayBtn) {
-    invPayBtn.addEventListener('click', () => {
-      const amount = parseInt(invPayBtn.getAttribute('data-amount'));
-      const desc   = invPayBtn.getAttribute('data-desc');
-      if (!amount) return;
-      switchView('portal');
-      document.querySelector('.portal-tab-btn[data-type="permit"]').click();
-      const customBill = {
-        owner: 'Calculated Permit Owner (New)', item: desc, amount,
-        arrears: 0, ref: 'SBP-' + Math.floor(Math.random() * 90000 + 10000), due: 'Immediate'
-      };
-      mockBills['permit']['CUSTOM-CALC'] = customBill;
-      document.getElementById('portal-ref-input').value = 'CUSTOM-CALC';
-      document.getElementById('portal-search-form').dispatchEvent(new Event('submit'));
-    });
+  // Portal payment confirm button
+  const confirmPortalPayBtn = document.getElementById('confirm-portal-payment');
+  if (confirmPortalPayBtn) {
+    confirmPortalPayBtn.addEventListener('click', window.confirmPortalPayment);
   }
 
-  // ============================================================
-  // ENHANCED MULTI-CATEGORY FEE CALCULATOR
-  // ============================================================
-
-  // ── Complete Finance Act 2019 Fee Schedule ────────────────────
-  const feeSchedule = {
-
-    sbp: {
-      // Location keys: meru | nkubu | other
-      mega:         { meru: 50000, nkubu: 30000, other: 20000,  ref: 'Sch.13 – Class A',  note: 'Applies to wholesale depots, mega stores & supermarkets >2000 sqft' },
-      largeTrader:  { meru: 15000, nkubu:  8000, other:  6000,  ref: 'Sch.13 – Class B',  note: 'Businesses with more than 20 staff' },
-      mediumTrader: { meru:  7000, nkubu:  4000, other:  4000,  ref: 'Sch.13 – Class C',  note: '' },
-      smallTrader:  { meru:  3400, nkubu:  2000, other:  2000,  ref: 'Sch.13 – Class D',  note: '' },
-      kiosk:        { meru:  2700, nkubu:  1600, other:  1500,  ref: 'Sch.13 – Class E',  note: '' },
-      hawker:       { meru:  1500, nkubu:  1000, other:   800,  ref: 'Sch.13 – Class F',  note: 'Mobile traders; subject to daily market fees in addition' },
-      hotel:        { meru: 20000, nkubu: 10000, other:  7000,  ref: 'Sch.13 – Class G',  note: 'Star-rated hotels; rates vary by room count' },
-      restaurant:   { meru:  8000, nkubu:  5000, other:  3000,  ref: 'Sch.13 – Class H',  note: 'Includes nyama choma joints & fast food outlets' },
-      professional: { meru: 10000, nkubu:  6000, other:  4000,  ref: 'Sch.13 – Class I',  note: 'Law firms, accounting, consulting & insurance offices' },
-      school:       { meru: 15000, nkubu:  8000, other:  5000,  ref: 'Sch.13 – Class J',  note: 'Nursery to secondary; universities assessed separately' },
-      clinic:       { meru: 12000, nkubu:  7000, other:  5000,  ref: 'Sch.13 – Class K',  note: 'Includes pharmacies & diagnostic labs' },
-    },
-
-    advertising: {
-      // Location keys: meru | maua | other
-      directionalSingle: { meru:  1200, maua:   700, other:  500, ref: 'Sch.5 – Item 1a', note: 'Single-sided directional signboard per sq metre' },
-      directionalDouble: { meru:  2000, maua:  1200, other:  800, ref: 'Sch.5 – Item 1b', note: 'Double-sided directional signboard per sq metre' },
-      businessSignboard: { meru:  1400, maua:  1400, other:  500, ref: 'Sch.5 – Item 2',  note: 'Business name board at premises (per sq metre p.a.)' },
-      illuminated:       { meru:  7500, maua:  7500, other: 2500, ref: 'Sch.5 – Item 3',  note: 'Neon / LED-lit signboard (per sq metre p.a.)' },
-      billboard:         { meru: 30000, maua: 20000, other:10000, ref: 'Sch.5 – Item 4',  note: 'Unipole / hoarding billboard (per face p.a.)' },
-      poster:            { meru:    500, maua:   300, other:  200, ref: 'Sch.5 – Item 5',  note: 'Posters & handbills (per campaign / batch)' },
-      vehicleBranding:   { meru:  5000, maua:  5000, other: 3000, ref: 'Sch.5 – Item 6',  note: 'Vehicle wrap / painted advertising (per vehicle p.a.)' },
-      roadShow:          { meru:  3000, maua:  3000, other: 1500, ref: 'Sch.5 – Item 7',  note: 'Mobile road-show event (per day)' },
-    },
-
-    publichealth: {
-      // Location keys: meru | other (county-wide for most)
-      foodHygiene:       { meru:  2000, other: 1500, ref: 'Sch.11 – Item 1',  note: 'Food-handler certificate per person per year' },
-      premisesInspect:   { meru:  3000, other: 2000, ref: 'Sch.11 – Item 2',  note: 'Institutional / business premises inspection fee' },
-      schoolInspect:     { meru:  4000, other: 2500, ref: 'Sch.11 – Item 3',  note: 'Annual school sanitation & health inspection' },
-      medicalWaste:      { meru:  6000, other: 4000, ref: 'Sch.11 – Item 4',  note: 'Medical / hazardous waste handling licence p.a.' },
-      vaccinationCert:   { meru:   500, other:  500, ref: 'Sch.11 – Item 5',  note: 'Yellow-fever / typhoid vaccination certificate' },
-      buildingPlan:      { meru:  5000, other: 3000, ref: 'Sch.11 – Item 6',  note: 'Public health clearance for building plan approval' },
-      exhumation:        { meru: 10000, other: 8000, ref: 'Sch.11 – Item 7',  note: 'Exhumation / reburial permit' },
-    },
-
-    waste: {
-      // Location keys: meru | other  — SOURCE: Finance Act 2019, Section 5
-      // Thresholds based on SBP permit fee band
-      smallBusiness:    { meru:  1000, other:   200, ref: 'S.5(a) – Finance Act 2019', note: 'Small business: SBP permit fee up to Ksh 4,900 (annual)' },
-      mediumBusiness:   { meru:  3000, other:   500, ref: 'S.5(b) – Finance Act 2019', note: 'Medium business: SBP permit fee Ksh 4,901–7,000 (annual)' },
-      largeBusiness:    { meru:  5000, other:  1000, ref: 'S.5(c) – Finance Act 2019', note: 'Large business: SBP permit fee Ksh 7,001+ (annual)' },
-      banksInsurance:   { meru: 15000, other: 15000, ref: 'S.5(d) – Finance Act 2019', note: 'Insurance companies and banks (annual)' },
-      supermarket:      { meru: 25000, other: 25000, ref: 'S.5(e) – Finance Act 2019', note: 'Supermarkets, big stores, private learning institutions (annual)' },
-      professionalFirm: { meru:  3000, other:  1000, ref: 'S.5(f) – Finance Act 2019', note: 'Private registered firms: lawyers, doctors, accountants (annual)' },
-    },
-
-    parking: {
-      // SOURCE: Finance Act 2019, Section 3 — Transportation & Parking Fees
-      // Daily rates are UNIFORM county-wide (no CBD premium in the official schedule)
-      // Monthly charge also provided. Late payment of seasonal tickets = 25% penalty.
-      // Parking in un-designated areas = Ksh 10,000 fine.
-      // Location keys: daily | monthly (uniform — no cbd/other split in the Act)
-      motorbike:  { daily:  20, monthly:   300, ref: 'S.3(a) – Finance Act 2019', note: 'Boda-boda / motorbike — Daily: Ksh 20, Monthly: Ksh 300' },
-      tuktuk:     { daily:  50, monthly:  1000, ref: 'S.3(b) – Finance Act 2019', note: 'Tuktuk — Daily: Ksh 50, Monthly: Ksh 1,000' },
-      car:        { daily:  50, monthly:  1000, ref: 'S.3(d) – Finance Act 2019', note: 'Saloon car / taxi — Daily: Ksh 50, Monthly: Ksh 1,000' },
-      matatu:     { daily: 100, monthly:  1800, ref: 'S.3(f) – Finance Act 2019', note: 'Matatu shuttle (10–14 seater) — Daily: Ksh 100, Monthly: Ksh 1,800' },
-      bus:        { daily: 200, monthly:  3900, ref: 'S.3(h) – Finance Act 2019', note: 'Bus (30–62 seater) — Daily: Ksh 200, Monthly: Ksh 3,900' },
-      lightTruck: { daily: 150, monthly:  2200, ref: 'S.3(k) – Finance Act 2019', note: 'Light truck (1–6 tons) — Daily: Ksh 150, Monthly: Ksh 2,200' },
-      lorry:      { daily: 250, monthly:  4500, ref: 'S.3(m) – Finance Act 2019', note: 'Lorry — Daily: Ksh 250, Monthly: Ksh 4,500' },
-      trailer:    { daily: 300, monthly:  5000, ref: 'S.3(n) – Finance Act 2019', note: 'Trailer — Daily: Ksh 300, Monthly: Ksh 5,000' },
-    },
-    liquor: {
-      generalRetail:      { meru: 30000, other: 15000, ref: 'Sch.1 – Item 1',  note: 'Application fee of Ksh 5,000 applies separately.' },
-      wholesale:          { meru: 55000, other: 50000, ref: 'Sch.1 – Item 2',  note: 'Application fee of Ksh 5,000 applies separately.' },
-      retailSpirits:      { meru: 50000, other: 24000, ref: 'Sch.1 – Item 3',  note: 'Application fee of Ksh 5,000 applies separately.' },
-      barRestaurant:      { meru: 24000, other: 30000, ref: 'Sch.1 – Item 4',  note: 'Application fee of Ksh 5,000 applies separately.' },
-      temporary:          { meru:  6000, other:  6000, ref: 'Sch.1 – Item 5',  note: 'Application fee of Ksh 5,000 applies separately.' },
-      nightClub:          { meru: 100000,other: 50000, ref: 'Sch.1 – Item 6',  note: 'Application fee of Ksh 5,000 applies separately.' },
-      depot:              { meru: 30000, other: 30000, ref: 'Sch.1 – Item 7',  note: 'Application fee of Ksh 5,000 applies separately.' },
-      distributor:        { meru: 55000, other: 50000, ref: 'Sch.1 – Item 8',  note: 'Application fee of Ksh 5,000 applies separately.' },
-      supermarket:        { meru: 75000, other: 70000, ref: 'Sch.1 – Item 9',  note: 'Application fee of Ksh 5,000 applies separately.' },
-      manufacturer:       { meru: 250000,other: 250000,ref: 'Sch.1 – Item 10', note: 'Application fee of Ksh 5,000 applies separately.' },
-    },
-
-    general_fees: {
-      bondWithdrawal:     { meru:  1000, other:  1000, ref: 'Sch.2 – Item a',  note: '' },
-      buildingMaterials:  { meru:  2000, other:  2000, ref: 'Sch.2 – Item c',  note: 'Commercial' },
-      kioskTransfer:      { meru:  3000, other:  3000, ref: 'Sch.2 – Item d',  note: '' },
-      tenderDocs:         { meru:  1000, other:  1000, ref: 'Sch.2 – Item e',  note: '' },
-      bouncedCheque:      { meru: 10000, other: 10000, ref: 'Sch.2 – Item m',  note: 'Penalty for returned cheques' },
-      subletPremises:     { meru:  2000, other:  2000, ref: 'Sch.2 – Item p',  note: '' },
-      changeActivity:     { meru:  2000, other:  2000, ref: 'Sch.2 – Item q',  note: 'Change of business activity' },
-      sbpApp:             { meru:  2000, other:  1000, ref: 'Sch.2 – Item r',  note: 'New SBP Application' },
-      sbpRenewal:         { meru:   500, other:   200, ref: 'Sch.2 – Item w',  note: 'SBP Renewal Application' },
-      leaseExtension:     { meru: 20000, other: 20000, ref: 'Sch.2 – Item x',  note: 'Renewal or Extension of Lease' },
-      transferConsent:    { meru:  6000, other:  6000, ref: 'Sch.2 – Item ab', note: 'Consent for Transfer/Sub-division' },
-      clearanceCert:      { meru:  4000, other:  4000, ref: 'Sch.2 – Item ad', note: 'Rates & Rents Clearance Certificate' },
-      sewerConnection:    { meru: 20000, other: 20000, ref: 'Sch.2 – Item ar', note: 'Sewer Line Connection' },
-    },
-
-    agri_cess: {
-      cabbages:           { amount:   20, ref: 'Sch.4 – Item 1(a)', note: 'Per 50kg bag' },
-      transportPickup:    { amount:  200, ref: 'Sch.4 – Item 1(b)', note: '0.5 Tonnes' },
-      transportLight:     { amount: 1000, ref: 'Sch.4 – Item 1(f)', note: '5–10 Tonnes' },
-      transportTrailer:   { amount: 4000, ref: 'Sch.4 – Item 1(h)', note: 'Over 17 Tonnes' },
-      sandLorry:          { amount: 1000, ref: 'Sch.4 – Item 5(c)', note: '7 Tonnes' },
-      sandTrailer:        { amount: 2000, ref: 'Sch.4 – Item 5(f)', note: '' },
-      blocksTrailer:      { amount: 1000, ref: 'Sch.4 – Item 6',    note: '' },
-      timberTrailer:      { amount: 5000, ref: 'Sch.4 – Item 12(e)',note: '' },
-      miraaPickup:        { amount: 1000, ref: 'Sch.4 – Item 18(b)',note: '' },
-      miraaLorry:         { amount: 2000, ref: 'Sch.4 – Item 18(c)',note: 'Lorry/Bus' },
-      teaCoffeeTax:       { amount:    0, ref: 'Sch.4 – Item 19(f)',note: '⚠️ Note: This tax is 1% of Gross Turnover. Please calculate manually and remit.' },
-    },
-
-    livestock: {
-      inspCattle:         { amount:  100, ref: 'Sch.6 – Item a',    note: 'Per head' },
-      inspSheep:          { amount:   40, ref: 'Sch.6 – Item b',    note: 'Per head' },
-      slaughterCatA:      { amount: 6000, ref: 'Sch.6 – Item c',    note: 'Per year' },
-      slaughterCatB:      { amount: 4000, ref: 'Sch.6 – Item d',    note: 'Per year' },
-      transCow:           { amount:  100, ref: 'Sch.6 – Item e',    note: 'Per head' },
-      transCamel:         { amount:  200, ref: 'Sch.6 – Item f',    note: 'Per head' },
-      liveSingleDay:      { amount:  600, ref: 'Sch.6 – Item g',    note: '1-20 heads' },
-    },
-
-
-  };
-
-  // ── Label Maps ────────────────────────────────────────────────
-  const locationLabels = {
-    meru: 'Meru Town (CBD)',
-    nkubu: 'Nkubu / Timau / Laare',
-    other: 'Other Sub-County',
-    maua: 'Maua / Nkubu',
-    cbd: 'CBD / Town Centre',
-  };
-
-  const categoryLabels = {
-    sbp: 'Single Business Permit',
-    advertising: 'Outdoor Advertising',
-    publichealth: 'Public Health',
-    waste: 'Solid Waste Management',
-    parking: 'Parking Fees',
-    liquor: 'Liquor Licensing',
-    general_fees: 'General Fees & Charges',
-    agri_cess: 'Agricultural Produce Cess',
-    livestock: 'Livestock & Meat Inspection',
-
-  };
-
-  // ── Search Index ─────────────────────────────────────────────
-  const searchIndex = [
-    { label: 'Garbage – Small',          category: 'waste',        subKey: 'smallBusiness',      location: 'meru' },
-    { label: 'Garbage – Medium',         category: 'waste',        subKey: 'mediumBusiness',     location: 'meru' },
-    { label: 'Garbage – Large',          category: 'waste',        subKey: 'largeBusiness',      location: 'meru' },
-    { label: 'Garbage – Banks/Insurance',category: 'waste',        subKey: 'banksInsurance',     location: 'meru' },
-    { label: 'Garbage – Supermarket',    category: 'waste',        subKey: 'supermarket',        location: 'meru' },
-    { label: 'Garbage – Professional',   category: 'waste',        subKey: 'professionalFirm',   location: 'meru' },
-    { label: 'Motorbike Parking (Daily)',  category: 'parking',    subKey: 'motorbike',          location: 'daily'  },
-    { label: 'Tuktuk Parking (Daily)',     category: 'parking',    subKey: 'tuktuk',             location: 'daily'  },
-    { label: 'Car Parking (Daily)',        category: 'parking',    subKey: 'car',                location: 'daily'  },
-    { label: 'Matatu Parking (Daily)',     category: 'parking',    subKey: 'matatu',             location: 'daily'  },
-    { label: 'Bus Parking (Daily)',        category: 'parking',    subKey: 'bus',                location: 'daily'  },
-    { label: 'Light Truck Parking (Daily)',category: 'parking',    subKey: 'lightTruck',         location: 'daily'  },
-    { label: 'Lorry Parking (Daily)',      category: 'parking',    subKey: 'lorry',              location: 'daily'  },
-    { label: 'Trailer Parking (Daily)',    category: 'parking',    subKey: 'trailer',            location: 'daily'  },
-    { label: 'Monthly Parking (Car)',      category: 'parking',    subKey: 'car',                location: 'monthly'},
-    { label: 'Liquor – General Retail',    category: 'liquor',       subKey: 'generalRetail',      location: 'meru' },
-    { label: 'Liquor – Night Club',        category: 'liquor',       subKey: 'nightClub',          location: 'meru' },
-    { label: 'General – Bounced Cheque',   category: 'general_fees', subKey: 'bouncedCheque',      location: 'meru' },
-    { label: 'Cess – Tea/Coffee Tax (1%)', category: 'agri_cess',    subKey: 'teaCoffeeTax',       location: 'county' },
-    { label: 'Cess – Transport (Trailer)', category: 'agri_cess',    subKey: 'transportTrailer',   location: 'county' },
-    { label: 'Livestock – Cow Inspection', category: 'livestock',    subKey: 'inspCattle',         location: 'county' },
-  ];
-
-  // ── Dynamic Field Templates ────────────────────────────────────
-  const dynamicTemplates = {
-    sbp: `
-      <div class="form-group">
-        <label>Location</label>
-        <select id="sbpLocation" class="form-control">
-          <option value="meru">Meru Town (CBD)</option>
-          <option value="nkubu">Nkubu / Timau / Laare</option>
-          <option value="other">Other Sub-County</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Business Category</label>
-        <select id="sbpBusiness" class="form-control">
-          <option value="mega">Mega Store / Wholesale Depot</option>
-          <option value="largeTrader">Large Trader (&gt; 20 staff)</option>
-          <option value="mediumTrader">Medium Trader</option>
-          <option value="smallTrader">Small Trader</option>
-          <option value="kiosk">Kiosk</option>
-          <option value="hawker">Hawker / Mobile Trader</option>
-          <option value="hotel">Hotel (Star-Rated)</option>
-          <option value="restaurant">Restaurant / Food Court</option>
-          <option value="professional">Professional Firm (Law, Accounting, Consulting)</option>
-          <option value="school">School / College</option>
-          <option value="clinic">Health Facility / Pharmacy / Lab</option>
-        </select>
-      </div>`,
-
-    advertising: `
-      <div class="form-group">
-        <label>Advertisement Type</label>
-        <select id="advertType" class="form-control">
-          <option value="directionalSingle">Directional Signboard (Single-Sided)</option>
-          <option value="directionalDouble">Directional Signboard (Double-Sided)</option>
-          <option value="businessSignboard">Business Name Signboard</option>
-          <option value="illuminated">Illuminated / LED Signboard</option>
-          <option value="billboard">Billboard / Unipole / Hoarding</option>
-          <option value="poster">Poster / Handbill / Flier (per campaign)</option>
-          <option value="vehicleBranding">Vehicle Branding / Wrap</option>
-          <option value="roadShow">Mobile Road Show (per day)</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Location</label>
-        <select id="advertLocation" class="form-control">
-          <option value="meru">Meru Town (CBD)</option>
-          <option value="maua">Maua / Nkubu</option>
-          <option value="other">Other Sub-Counties</option>
-        </select>
-      </div>`,
-
-    publichealth: `
-      <div class="form-group">
-        <label>Service Type</label>
-        <select id="phType" class="form-control">
-          <option value="foodHygiene">Food Hygiene Certificate (per person)</option>
-          <option value="premisesInspect">Premises / Business Inspection</option>
-          <option value="schoolInspect">School Sanitation Inspection</option>
-          <option value="medicalWaste">Medical / Hazardous Waste Licence</option>
-          <option value="vaccinationCert">Vaccination Certificate</option>
-          <option value="buildingPlan">Building Plan Health Clearance</option>
-          <option value="exhumation">Exhumation / Reburial Permit</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Location</label>
-        <select id="phLocation" class="form-control">
-          <option value="meru">Meru Town &amp; Suburbs</option>
-          <option value="other">Other Sub-Counties</option>
-        </select>
-      </div>`,
-
-    waste: `
-      <div class="form-group">
-        <label>Premises / Business Type</label>
-        <select id="wasteType" class="form-control">
-          <option value="smallBusiness">Small Business (SBP fee up to Ksh 4,900)</option>
-          <option value="mediumBusiness">Medium Business (SBP fee Ksh 4,901–7,000)</option>
-          <option value="largeBusiness">Large Business (SBP fee Ksh 7,001+)</option>
-          <option value="banksInsurance">Insurance Companies &amp; Banks</option>
-          <option value="supermarket">Supermarkets / Big Stores / Private Learning Institutions</option>
-          <option value="professionalFirm">Private Registered Firms (Lawyers, Doctors, Accountants)</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Location</label>
-        <select id="wasteLocation" class="form-control">
-          <option value="meru">Meru Town &amp; CBD</option>
-          <option value="other">Other Sub-Counties</option>
-        </select>
-      </div>`,
-
-    parking: `
-      <div class="form-group">
-        <label>Vehicle Type</label>
-        <select id="vehicleType" class="form-control">
-          <option value="motorbike">Motorbike / Boda-Boda</option>
-          <option value="tuktuk">Tuktuk</option>
-          <option value="car">Saloon Car / Taxi</option>
-          <option value="matatu">Matatu Shuttle (10–14 Seater)</option>
-          <option value="bus">Bus (30–62 Seater)</option>
-          <option value="lightTruck">Light Truck (1–6 Tons)</option>
-          <option value="lorry">Lorry</option>
-          <option value="trailer">Trailer</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Charge Type</label>
-        <select id="parkingChargeType" class="form-control">
-          <option value="daily">Daily Charge</option>
-          <option value="monthly">Monthly Seasonal Ticket</option>
-        </select>
-      </div>`,
-    liquor: `
-      <div class="form-group">
-        <label>Liquor License Type</label>
-        <select id="liquorType" class="form-control">
-          <option value="generalRetail">General Retail Alcoholic Drink</option>
-          <option value="wholesale">Wines &amp; Spirits Wholesale</option>
-          <option value="retailSpirits">Wines &amp; Spirits Retail</option>
-          <option value="barRestaurant">Bar, Restaurant &amp; Nyama Choma</option>
-          <option value="temporary">Temporary License</option>
-          <option value="nightClub">Night Club</option>
-          <option value="depot">Alcoholic Drink Depot</option>
-          <option value="distributor">Alcoholic Drink Distributor</option>
-          <option value="supermarket">Supermarket (Big) Alcoholic</option>
-          <option value="manufacturer">Alcoholic Drink Manufacturer</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Location</label>
-        <select id="liquorLocation" class="form-control">
-          <option value="meru">Meru Town &amp; Maua</option>
-          <option value="other">Other Markets</option>
-        </select>
-      </div>`,
-
-    general_fees: `
-      <div class="form-group">
-        <label>Fee Type</label>
-        <select id="genFeeType" class="form-control">
-          <option value="bondWithdrawal">Bond Withdrawal Fee</option>
-          <option value="buildingMaterials">Building materials approval (Commercial)</option>
-          <option value="kioskTransfer">Kiosk/house/stall transfer</option>
-          <option value="tenderDocs">Application for tender documents</option>
-          <option value="bouncedCheque">Bounced cheque penalty</option>
-          <option value="subletPremises">Sublet of Business Premises</option>
-          <option value="changeActivity">Change of business activity</option>
-          <option value="sbpApp">New Single Business Permit application</option>
-          <option value="sbpRenewal">SBP Renewal application fee</option>
-          <option value="leaseExtension">Renewal or Extension of Lease</option>
-          <option value="transferConsent">Consent for Transfer/Sub-division</option>
-          <option value="clearanceCert">Rates &amp; Rents Clearance Certificate</option>
-          <option value="sewerConnection">Sewer Line Connection</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Location</label>
-        <select id="genFeeLocation" class="form-control">
-          <option value="meru">Meru / Maua / Nkubu</option>
-          <option value="other">Other Sub-Counties</option>
-        </select>
-      </div>`,
-
-    agri_cess: `
-      <div class="form-group">
-        <label>Produce &amp; Transport Type</label>
-        <select id="agriType" class="form-control">
-          <option value="cabbages">Cabbages/Bananas/Nuts (per 50kg bag)</option>
-          <option value="transportPickup">Produce Transport — Pick-up/Probox (0.5T)</option>
-          <option value="transportLight">Produce Transport — Light Truck (5–10T)</option>
-          <option value="transportTrailer">Produce Transport — Trailer (Over 17T)</option>
-          <option value="sandLorry">Sand Transport — Lorry (7T)</option>
-          <option value="sandTrailer">Sand Transport — Trailer</option>
-          <option value="blocksTrailer">Building Blocks/Stones — Trailer</option>
-          <option value="timberTrailer">Timber Transport — Trailer</option>
-          <option value="miraaPickup">Miraa Cess — Pick-up</option>
-          <option value="miraaLorry">Miraa Cess — Lorry/Bus</option>
-          <option value="teaCoffeeTax">Tea/Coffee Industrial Gross Turnover Tax (1%)</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Location</label>
-        <select id="agriLocation" class="form-control" disabled>
-          <option value="county">County-Wide / Border Points</option>
-        </select>
-      </div>`,
-
-    livestock: `
-      <div class="form-group">
-        <label>Service Type</label>
-        <select id="livestockType" class="form-control">
-          <option value="inspCattle">Meat Inspection: Cattle/Camel (per head)</option>
-          <option value="inspSheep">Meat Inspection: Sheep/Goat/Pig (per head)</option>
-          <option value="slaughterCatA">Slaughterhouse License (Category A)</option>
-          <option value="slaughterCatB">Slaughterhouse License (Category B)</option>
-          <option value="transCow">Livestock Transport Cess: Cow/Bull/Donkey</option>
-          <option value="transCamel">Livestock Transport Cess: Camel</option>
-          <option value="liveSingleDay">Live Animals Single Day Permit</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Location</label>
-        <select id="livestockLocation" class="form-control" disabled>
-          <option value="county">County-Wide</option>
-        </select>
-      </div>`,
-
-  };
-
-  // ── DOM References ────────────────────────────────────────────
-  const revCatSel        = document.getElementById('revenueCategory');
-  const dynFields        = document.getElementById('dynamicFields');
-  const calcFeeBtn       = document.getElementById('calculateFeeBtn');
-  const resultService    = document.getElementById('resultService');
-  const resultLocation   = document.getElementById('resultLocation');
-  const resultReference  = document.getElementById('resultReference');
-  const resultAmount     = document.getElementById('resultAmount');
-  const resultNote       = document.getElementById('resultNote');
-  const resultNoteRow    = document.getElementById('resultNoteRow');
-  const feeGenInvoiceBtn = document.getElementById('feeGenInvoiceBtn');
-  const feeProceedBtn    = document.getElementById('feeProceedBtn');
-  const searchInput      = document.getElementById('serviceSearch');
-  const suggestions      = document.getElementById('searchSuggestions');
-
-  // ── Revenue Category Change → inject dynamic fields ───────────
-  if (revCatSel) {
-    revCatSel.addEventListener('change', () => {
-      const cat = revCatSel.value;
-      if (cat && dynamicTemplates[cat]) {
-        dynFields.innerHTML = dynamicTemplates[cat];
-        calcFeeBtn.disabled = false;
-      } else {
-        dynFields.innerHTML = '';
-        calcFeeBtn.disabled = true;
-      }
-      // reset result panel
-      resetResultPanel();
-    });
-  }
-
-  // ── Calculate Fee ─────────────────────────────────────────────
-  if (calcFeeBtn) {
-    calcFeeBtn.addEventListener('click', () => {
-      const cat = revCatSel.value;
-      if (!cat) return;
-
-      let amount = 0, service = '', location = '', ref = '', note = '';
-
-      try {
-        if (cat === 'sbp') {
-          const biz = document.getElementById('sbpBusiness').value;
-          const loc = document.getElementById('sbpLocation').value;
-          const row = feeSchedule.sbp[biz];
-          amount   = row[loc] ?? row.other;
-          service  = document.getElementById('sbpBusiness').selectedOptions[0].text;
-          location = locationLabels[loc] || loc;
-          ref      = row.ref;
-          note     = row.note;
-
-        } else if (cat === 'advertising') {
-          const type = document.getElementById('advertType').value;
-          const loc  = document.getElementById('advertLocation').value;
-          const row  = feeSchedule.advertising[type];
-          amount   = row[loc] ?? row.other;
-          service  = document.getElementById('advertType').selectedOptions[0].text;
-          location = locationLabels[loc] || loc;
-          ref      = row.ref;
-          note     = row.note;
-
-        } else if (cat === 'publichealth') {
-          const type = document.getElementById('phType').value;
-          const loc  = document.getElementById('phLocation').value;
-          const row  = feeSchedule.publichealth[type];
-          amount   = row[loc] ?? row.other;
-          service  = document.getElementById('phType').selectedOptions[0].text;
-          location = locationLabels[loc] || loc;
-          ref      = row.ref;
-          note     = row.note;
-
-        } else if (cat === 'waste') {
-          const type = document.getElementById('wasteType').value;
-          const loc  = document.getElementById('wasteLocation').value;
-          const row  = feeSchedule.waste[type];
-          amount   = row[loc] ?? row.other;
-          service  = document.getElementById('wasteType').selectedOptions[0].text;
-          location = locationLabels[loc] || loc;
-          ref      = row.ref;
-          note     = row.note;
-
-        } else if (cat === 'parking') {
-          const type       = document.getElementById('vehicleType').value;
-          const chargeType = document.getElementById('parkingChargeType').value;
-          const row        = feeSchedule.parking[type];
-          amount   = row[chargeType];
-          const chargeLabel = chargeType === 'daily' ? 'Daily Rate' : 'Monthly Seasonal Ticket';
-          service  = document.getElementById('vehicleType').selectedOptions[0].text + ' (' + chargeLabel + ')';
-          location = 'County-Wide (Uniform Rate — Finance Act 2019 S.3)';
-          ref      = row.ref;
-          note     = row.note + (chargeType === 'monthly' ? ' | ⚠️ Late payment of monthly tickets attracts a 25% penalty. Parking in un-designated areas = Ksh 10,000 fine.' : ' | ⚠️ Parking in un-designated areas attracts a fine of Ksh 10,000.');
-
-        } else if (cat === 'liquor') {
-          const type = document.getElementById('liquorType').value;
-          const loc  = document.getElementById('liquorLocation').value;
-          const row  = feeSchedule.liquor[type];
-          amount   = row[loc] ?? row.other;
-          service  = document.getElementById('liquorType').selectedOptions[0].text;
-          location = locationLabels[loc] || loc;
-          ref      = row.ref;
-          note     = row.note;
-
-        } else if (cat === 'general_fees') {
-          const type = document.getElementById('genFeeType').value;
-          const loc  = document.getElementById('genFeeLocation').value;
-          const row  = feeSchedule.general_fees[type];
-          amount   = row[loc] ?? row.other;
-          service  = document.getElementById('genFeeType').selectedOptions[0].text;
-          location = locationLabels[loc] || loc;
-          ref      = row.ref;
-          note     = row.note;
-
-        } else if (cat === 'agri_cess') {
-          const type = document.getElementById('agriType').value;
-          const row  = feeSchedule.agri_cess[type];
-          amount   = row.amount;
-          service  = document.getElementById('agriType').selectedOptions[0].text;
-          location = 'County-Wide / Border Points';
-          ref      = row.ref;
-          note     = row.note;
-          if (type === 'teaCoffeeTax') amount = 0;
-
-        } else if (cat === 'livestock') {
-          const type = document.getElementById('livestockType').value;
-          const row  = feeSchedule.livestock[type];
-          amount   = row.amount;
-          service  = document.getElementById('livestockType').selectedOptions[0].text;
-          location = 'County-Wide';
-          ref      = row.ref;
-          note     = row.note;
-        }
-
-        // Fallback guard — should never be 0 with full schedule but just in case
-        if (!amount || amount === 0) {
-          alert('Fee data not yet available for this combination. Please contact the Revenue Board directly.');
-          return;
-        }
-
-        // Update result panel
-        resultService.textContent   = service;
-        resultLocation.textContent  = location;
-        resultReference.textContent = ref;
-        resultAmount.textContent    = 'KES ' + amount.toLocaleString();
-
-        if (note) {
-          resultNote.textContent  = note;
-          resultNoteRow.style.display = 'flex';
-        } else {
-          resultNoteRow.style.display = 'none';
-        }
-
-        feeGenInvoiceBtn.disabled = false;
-        feeProceedBtn.disabled    = false;
-        feeGenInvoiceBtn.setAttribute('data-amount', amount);
-        feeGenInvoiceBtn.setAttribute('data-desc', `${categoryLabels[cat]} – ${service}`);
-        feeProceedBtn.setAttribute('data-amount', amount);
-        feeProceedBtn.setAttribute('data-desc', `${categoryLabels[cat]} – ${service}`);
-
-      } catch (err) {
-        alert('Could not calculate fee for this selection. Please try another combination.');
-        console.error('[FeeCalc]', err);
-      }
-    });
-  }
-
-  // ── Proceed to Payment ────────────────────────────────────────
-  function wirePaymentBtn(btn) {
-    if (!btn) return;
-    btn.addEventListener('click', () => {
-      const amount = parseInt(btn.getAttribute('data-amount'));
-      const desc   = btn.getAttribute('data-desc');
-      if (!amount) return;
-      switchView('portal');
-      document.querySelector('.portal-tab-btn[data-type="permit"]').click();
-      const customBill = {
-        owner: 'Fee Calculator Estimate', item: desc, amount,
-        arrears: 0, ref: 'FEE-' + Math.floor(Math.random() * 90000 + 10000), due: 'Immediate'
-      };
-      mockBills['permit']['CUSTOM-CALC'] = customBill;
-      document.getElementById('portal-ref-input').value = 'CUSTOM-CALC';
-      document.getElementById('portal-search-form').dispatchEvent(new Event('submit'));
-    });
-  }
-  wirePaymentBtn(feeProceedBtn);
-  wirePaymentBtn(feeGenInvoiceBtn);
-
-  // ── Quick Select Dropdown ─────────────────────────────────────
-  if (searchInput) {
-    searchInput.addEventListener('change', () => {
-      const val = searchInput.value;
-      if (!val) return;
-      const item = searchIndex.find(i => i.label === val);
-      if (!item) return;
-
-      // Auto-select category and sub-type
-      revCatSel.value = item.category;
-      revCatSel.dispatchEvent(new Event('change'));
-      
-      // Set the sub-field after template is injected
-      setTimeout(() => {
-        const subMap = {
-          sbp:         { field: 'sbpBusiness',  locField: 'sbpLocation'  },
-          advertising: { field: 'advertType',   locField: 'advertLocation' },
-          publichealth:{ field: 'phType',        locField: 'phLocation'   },
-          waste:       { field: 'wasteType',     locField: 'wasteLocation' },
-          parking:     { field: 'vehicleType',   locField: 'parkingChargeType' },
-          liquor:      { field: 'liquorType',    locField: 'liquorLocation' },
-          general_fees:{ field: 'genFeeType',    locField: 'genFeeLocation' },
-          agri_cess:   { field: 'agriType',      locField: 'agriLocation' },
-          livestock:   { field: 'livestockType', locField: 'livestockLocation' },
-
-        };
-        const map = subMap[item.category];
-        if (map) {
-          const subSel = document.getElementById(map.field);
-          const locSel = document.getElementById(map.locField);
-          if (subSel) subSel.value = item.subKey;
-          if (locSel) locSel.value = item.location;
-          // trigger change on subSel to calculate
-          if (subSel) subSel.dispatchEvent(new Event('change'));
-        }
-      }, 50);
-    });
-  }
-
-  function resetResultPanel() {
-    if (resultService)   resultService.textContent  = '—';
-    if (resultLocation)  resultLocation.textContent  = '—';
-    if (resultReference) resultReference.textContent = '—';
-    if (resultAmount)    resultAmount.textContent     = 'KES 0';
-    if (resultNoteRow)   resultNoteRow.style.display  = 'none';
-    if (feeGenInvoiceBtn) feeGenInvoiceBtn.disabled   = true;
-    if (feeProceedBtn)    feeProceedBtn.disabled       = true;
-  }
-
-  // --- PORTAL SIMULATOR (MERUPAY) LOGIC ---
-  const portalTabBtns = document.querySelectorAll('.portal-tab-btn');
-  const portalInputLabel = document.getElementById('portal-input-label');
-  const portalRefInput = document.getElementById('portal-ref-input');
-  const portalSearchForm = document.getElementById('portal-search-form');
-  
-  // Track selected category in portal (land / SBP / parking)
-  let selectedPortalCategory = 'land';
-  let activeBill = null;
-
-  portalTabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      portalTabBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-
-      selectedPortalCategory = btn.getAttribute('data-type');
-      
-      // Update input labels & placeholders dynamically
-      if (selectedPortalCategory === 'land') {
-        portalInputLabel.textContent = 'Enter Plot Number';
-        portalRefInput.placeholder = 'e.g., 123/MERU/2024';
-      } else if (selectedPortalCategory === 'permit') {
-        portalInputLabel.textContent = 'Enter Business ID / SBP Code';
-        portalRefInput.placeholder = 'e.g., SBP-2024-8890';
-      } else if (selectedPortalCategory === 'parking') {
-        portalInputLabel.textContent = 'Enter Vehicle License Plate';
-        portalRefInput.placeholder = 'e.g., KCD 123A';
-      }
-
-      // Reset Simulator Terminal state
-      resetTerminal();
-    });
-  });
-
-  // Portal billing search submit
-  portalSearchForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const query = portalRefInput.value.trim();
-
-    if (!query) {
-      alert('Please enter a reference code to search.');
-      return;
-    }
-
-    // Try finding in mock DB
-    let bill = null;
-    if (mockBills[selectedPortalCategory] && mockBills[selectedPortalCategory][query]) {
-      bill = mockBills[selectedPortalCategory][query];
-    } else {
-      // Fallback: Generate a random bill on-the-fly to keep the simulator working and friendly
-      const randomNames = ['Nicholas Kirimi', 'Christine Makena', 'David Murithi', 'Beatrice Kawira', 'Fredrick Gitonga'];
-      const randomName = randomNames[Math.floor(Math.random() * randomNames.length)];
-      
-      let itemDesc = '';
-      let randAmount = 1000;
-      
-      if (selectedPortalCategory === 'land') {
-        itemDesc = `Plot No. ${query} (Generated Mock Assessment)`;
-        randAmount = Math.floor(Math.random() * 8000) + 3000;
-      } else if (selectedPortalCategory === 'permit') {
-        itemDesc = `Single Business Permit - Reference ${query}`;
-        randAmount = Math.floor(Math.random() * 15000) + 5000;
-      } else if (selectedPortalCategory === 'parking') {
-        itemDesc = `Daily Town Parking - Vehicle ${query}`;
-        randAmount = 200;
-      }
-
-      bill = {
-        owner: randomName,
-        item: itemDesc,
-        amount: randAmount,
-        arrears: Math.random() > 0.6 ? Math.floor(Math.random() * 1500) : 0,
-        ref: 'REF-' + Math.floor(Math.random() * 90000 + 10000),
-        due: '30 Days'
-      };
-    }
-
-    activeBill = bill;
-    renderBillDetails(bill);
-  });
-
-  // Reset simulator terminal
-  function resetTerminal() {
-    activeBill = null;
-    document.querySelectorAll('.terminal-state').forEach(s => s.classList.remove('active'));
-    document.getElementById('state-empty').classList.add('active');
-  }
-
-  // Render Bill Details in Terminal
-  function renderBillDetails(bill) {
-    document.querySelectorAll('.terminal-state').forEach(s => s.classList.remove('active'));
-    
-    const detailsState = document.getElementById('state-details');
-    
-    // Fill bill details
-    document.getElementById('det-ref').textContent = bill.ref;
-    document.getElementById('det-owner').textContent = bill.owner;
-    document.getElementById('det-item').textContent = bill.item;
-    document.getElementById('det-due').textContent = bill.due;
-    document.getElementById('det-amount').textContent = 'KES ' + bill.amount.toLocaleString();
-    document.getElementById('det-arrears').textContent = 'KES ' + bill.arrears.toLocaleString();
-    
-    const totalPayable = bill.amount + bill.arrears;
-    document.getElementById('det-total').textContent = 'KES ' + totalPayable.toLocaleString();
-
-    // Reset phone input & method selection
-    const mpesaBtn = document.getElementById('method-mpesa');
-    const mpesaForm = document.getElementById('mpesa-payment-form');
-    mpesaBtn.classList.add('selected');
-    mpesaForm.style.display = 'block';
-
-    detailsState.classList.add('active');
-  }
-
-  // Pay simulator actions (Mpesa push or Card)
-  const mpesaMethodBtn = document.getElementById('method-mpesa');
-  const cardMethodBtn = document.getElementById('method-card');
-  const mpesaPaymentForm = document.getElementById('mpesa-payment-form');
-  const phoneNoInput = document.getElementById('portal-phone-no');
-
-  mpesaMethodBtn.addEventListener('click', () => {
-    mpesaMethodBtn.classList.add('selected');
-    cardMethodBtn.classList.remove('selected');
-    mpesaPaymentForm.style.display = 'block';
-  });
-
-  cardMethodBtn.addEventListener('click', () => {
-    cardMethodBtn.classList.add('selected');
-    mpesaMethodBtn.classList.remove('selected');
-    mpesaPaymentForm.style.display = 'none';
-    alert('Bank/Card checkout is in staging. Please select "M-Pesa Express" for a full functional simulation demo.');
-  });
-
-  // Handle trigger simulated STK push
-  mpesaPaymentForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const phone = phoneNoInput.value.trim();
-
-    if (!phone || !/^0(7|1)\d{8}$/.test(phone)) {
-      alert('Please enter a valid Kenyan Safaricom phone number (e.g. 0712345678).');
-      return;
-    }
-
-    triggerSTKPushSimulation(phone);
-  });
-
-  function triggerSTKPushSimulation(phone) {
-    document.querySelectorAll('.terminal-state').forEach(s => s.classList.remove('active'));
-    
-    const processingState = document.getElementById('state-processing');
-    processingState.querySelector('p').textContent = `Initiating secure connection. Sending STK Push to ${phone}...`;
-    processingState.classList.add('active');
-
-    // Step 2: Show Mock Phone STK Push Popup after 1.8 seconds
-    setTimeout(() => {
+  // Portal receipt buttons
+  const newReceiptBtn = document.getElementById('btn-receipt-new');
+  if (newReceiptBtn) {
+    newReceiptBtn.addEventListener('click', function() {
+      const portalRefInput = document.getElementById('portal-ref-input');
+      if (portalRefInput) portalRefInput.value = '';
+      const portalService = document.getElementById('portal-service');
+      if (portalService) portalService.value = '';
       document.querySelectorAll('.terminal-state').forEach(s => s.classList.remove('active'));
-      
-      const stkbillingState = document.getElementById('state-stk-push');
-      stkbillingState.classList.add('active');
-      
-      // Update phone mockup fields
-      const totalAmount = activeBill.amount + activeBill.arrears;
-      document.getElementById('phone-amount').textContent = totalAmount.toLocaleString();
-      document.getElementById('phone-ref').textContent = activeBill.ref;
-      
-      // Reset Pin input and setup events
-      const pinInput = document.getElementById('phone-pin-input');
-      pinInput.value = '';
-      pinInput.focus();
-
-      // Reset countdown bar
-      const progress = document.querySelector('.countdown-progress');
-      // Force repaint to reset animation
-      progress.style.animation = 'none';
-      progress.offsetHeight; // trigger reflow
-      progress.style.animation = 'countdown 15s linear forwards';
-
-      // Setup actions
-      const sendBtn = document.getElementById('phone-send-btn');
-      const cancelBtn = document.getElementById('phone-cancel-btn');
-      
-      // Clear old event listeners
-      const newSendBtn = sendBtn.cloneNode(true);
-      const newCancelBtn = cancelBtn.cloneNode(true);
-      sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
-      cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
-
-      // Timeout handler (STK cancelled if user does not respond in 15 seconds)
-      const stkTimeout = setTimeout(() => {
-        alert('Payment session timed out. Please try again.');
-        renderBillDetails(activeBill);
-      }, 15000);
-
-      newCancelBtn.addEventListener('click', () => {
-        clearTimeout(stkTimeout);
-        alert('Payment cancelled by user.');
-        renderBillDetails(activeBill);
-      });
-
-      newSendBtn.addEventListener('click', () => {
-        const pin = pinInput.value;
-        if (pin.length < 4) {
-          alert('Please enter a 4-digit M-Pesa PIN.');
-          return;
-        }
-        
-        clearTimeout(stkTimeout);
-        
-        // Step 3: Processing payment status
-        document.querySelectorAll('.terminal-state').forEach(s => s.classList.remove('active'));
-        processingState.querySelector('p').textContent = 'Confirming payment receipt from Safaricom API...';
-        processingState.classList.add('active');
-
-        // Step 4: Show Successful Receipt
-        setTimeout(() => {
-          document.querySelectorAll('.terminal-state').forEach(s => s.classList.remove('active'));
-          
-          const receiptState = document.getElementById('state-success');
-          
-          // Generate transaction receipt code
-          const receiptCode = 'MCRB' + Math.random().toString(36).substring(2, 8).toUpperCase() + Math.floor(Math.random() * 10);
-          const totalPayable = activeBill.amount + activeBill.arrears;
-          
-          // Set UI receipt details
-          document.getElementById('rec-code').textContent = receiptCode;
-          document.getElementById('rec-ref').textContent = activeBill.ref;
-          document.getElementById('rec-owner').textContent = activeBill.owner;
-          document.getElementById('rec-desc').textContent = activeBill.item;
-          document.getElementById('rec-total').textContent = 'KES ' + totalPayable.toLocaleString();
-          
-          const now = new Date();
-          document.getElementById('rec-date').textContent = now.toLocaleString();
-          
-          receiptState.classList.add('active');
-
-          // Trigger confetti or checkmark animation scale
-          if (window.lucide) {
-            window.lucide.createIcons();
-          }
-        }, 2200);
-      });
-    }, 1800);
+      const emptyState = document.getElementById('state-empty');
+      if (emptyState) emptyState.classList.add('active');
+    });
   }
 
-  // Receipt Buttons
-  document.getElementById('btn-receipt-new').addEventListener('click', () => {
-    portalRefInput.value = '';
-    resetTerminal();
-  });
+  const downloadReceiptBtn = document.getElementById('btn-receipt-download');
+  if (downloadReceiptBtn) {
+    downloadReceiptBtn.addEventListener('click', function() {
+      window.print();
+    });
+  }
 
-  document.getElementById('btn-receipt-download').addEventListener('click', () => {
-    window.print();
-  });
-
-  // --- FAQS ACCORDION LOGIC ---
+  // --- FAQS ACCORDION ---
   const faqItems = document.querySelectorAll('.faq-item');
   faqItems.forEach(item => {
     const question = item.querySelector('.faq-question');
-    question.addEventListener('click', () => {
-      const isActive = item.classList.contains('active');
-      
-      // Close all other items
-      faqItems.forEach(i => i.classList.remove('active'));
-      
-      if (!isActive) {
-        item.classList.add('active');
-      }
-    });
+    if (question) {
+      question.addEventListener('click', () => {
+        const isActive = item.classList.contains('active');
+        faqItems.forEach(i => i.classList.remove('active'));
+        if (!isActive) item.classList.add('active');
+      });
+    }
   });
 
-  // --- CONTACT FORM SUBMIT ---
+  // --- CONTACT FORM ---
   const contactForm = document.getElementById('mcrb-contact-form');
   if (contactForm) {
-    contactForm.addEventListener('submit', (e) => {
+    contactForm.addEventListener('submit', function(e) {
       e.preventDefault();
-      
-      const name = document.getElementById('contact-name').value.trim();
-      const email = document.getElementById('contact-email').value.trim();
-      const message = document.getElementById('contact-message').value.trim();
-
-      if (!name || !email || !message) {
+      const name = document.getElementById('contact-name');
+      const email = document.getElementById('contact-email');
+      const message = document.getElementById('contact-message');
+      if (!name?.value.trim() || !email?.value.trim() || !message?.value.trim()) {
         alert('Please fill out all fields in the contact form.');
         return;
       }
-
-      alert(`Thank you, ${name}! Your message has been sent successfully. Our support desk will reply to ${email} shortly.`);
+      alert(`Thank you, ${name.value}! Your message has been sent successfully. Our support desk will reply to ${email.value} shortly.`);
       contactForm.reset();
     });
   }
 
-  // --- CHATBOT support WIDGET LOGIC ---
+  // --- CHATBOT ---
   const chatTrigger = document.getElementById('chatbot-trigger');
   const chatWindow = document.getElementById('chatbot-window');
   const chatBody = document.getElementById('chatbot-body');
@@ -1362,225 +1291,88 @@ document.addEventListener('DOMContentLoaded', () => {
   const chatSendBtn = document.getElementById('chatbot-send-btn');
   const chatOptionBtns = document.querySelectorAll('.chat-option-btn');
 
-  // Toggle open / close
-  chatTrigger.addEventListener('click', () => {
-    chatWindow.classList.toggle('active');
-    chatTrigger.classList.toggle('active');
-    
-    // Dynamic icon toggle inside trigger
-    if (chatTrigger.classList.contains('active')) {
-      chatTrigger.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
-    } else {
-      chatTrigger.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-message-square"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
-    }
-  });
-
-  // Options Quick Questions
-  chatOptionBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const questionText = btn.textContent;
-      appendUserMessage(questionText);
-      generateBotResponse(questionText);
+  if (chatTrigger && chatWindow) {
+    chatTrigger.addEventListener('click', function() {
+      chatWindow.classList.toggle('active');
+      chatTrigger.classList.toggle('active');
+      if (chatTrigger.classList.contains('active')) {
+        chatTrigger.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
+      } else {
+        chatTrigger.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-message-square"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+      }
     });
-  });
 
-  // Sending manual message
-  chatSendBtn.addEventListener('click', sendMessage);
-  chatInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') sendMessage();
-  });
+    chatOptionBtns.forEach(btn => {
+      btn.addEventListener('click', function() {
+        const questionText = btn.textContent;
+        appendUserMessage(questionText);
+        generateBotResponse(questionText);
+      });
+    });
 
-  function sendMessage() {
-    const messageText = chatInput.value.trim();
-    if (!messageText) return;
+    if (chatSendBtn && chatInput) {
+      chatSendBtn.addEventListener('click', sendMessage);
+      chatInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') sendMessage();
+      });
+    }
 
-    appendUserMessage(messageText);
-    chatInput.value = '';
-    
-    generateBotResponse(messageText);
-  }
+    function sendMessage() {
+      const messageText = chatInput?.value.trim();
+      if (!messageText) return;
+      appendUserMessage(messageText);
+      if (chatInput) chatInput.value = '';
+      generateBotResponse(messageText);
+    }
 
-  function appendUserMessage(text) {
-    const msgDiv = document.createElement('div');
-    msgDiv.classList.add('chat-message', 'user');
-    msgDiv.textContent = text;
-    chatBody.appendChild(msgDiv);
-    chatBody.scrollTop = chatBody.scrollHeight;
-  }
+    function appendUserMessage(text) {
+      if (!chatBody) return;
+      const msgDiv = document.createElement('div');
+      msgDiv.classList.add('chat-message', 'user');
+      msgDiv.textContent = text;
+      chatBody.appendChild(msgDiv);
+      chatBody.scrollTop = chatBody.scrollHeight;
+    }
 
-  function appendBotMessage(text) {
-    const msgDiv = document.createElement('div');
-    msgDiv.classList.add('chat-message', 'bot');
-    msgDiv.innerHTML = text;
-    chatBody.appendChild(msgDiv);
-    chatBody.scrollTop = chatBody.scrollHeight;
-  }
+    function appendBotMessage(text) {
+      if (!chatBody) return;
+      const msgDiv = document.createElement('div');
+      msgDiv.classList.add('chat-message', 'bot');
+      msgDiv.innerHTML = text;
+      chatBody.appendChild(msgDiv);
+      chatBody.scrollTop = chatBody.scrollHeight;
+    }
 
-  function generateBotResponse(userMsg) {
-    // Show typing indicator
-    const typingIndicator = document.createElement('div');
-    typingIndicator.classList.add('chat-message', 'bot', 'typing-indicator');
-    typingIndicator.innerHTML = '<em>Revenue Assistant is typing…</em>';
-    chatBody.appendChild(typingIndicator);
-    chatBody.scrollTop = chatBody.scrollHeight;
-
-    // Try Claude API first, fallback to keyword matching
-    callClaudeAPI(userMsg)
-      .then(responseText => {
-        if (typingIndicator.parentNode) typingIndicator.parentNode.removeChild(typingIndicator);
-        appendBotMessage(responseText);
-      })
-      .catch(() => {
-        // Fallback to keyword matching if API unavailable
+    function generateBotResponse(userMsg) {
+      const typingIndicator = document.createElement('div');
+      typingIndicator.classList.add('chat-message', 'bot', 'typing-indicator');
+      typingIndicator.innerHTML = '<em>Revenue Assistant is typing…</em>';
+      if (chatBody) chatBody.appendChild(typingIndicator);
+      if (chatBody) chatBody.scrollTop = chatBody.scrollHeight;
+      setTimeout(function() {
         const fallback = keywordFallback(userMsg);
         if (typingIndicator.parentNode) typingIndicator.parentNode.removeChild(typingIndicator);
         appendBotMessage(fallback);
-      });
-  }
+      }, 500);
+    }
 
-  async function callClaudeAPI(userMsg) {
-    // NOTE: For production, proxy this through your backend to protect the API key.
-    // For demo/prototype: Set your Anthropic API key below.
-    const API_KEY = ''; // ← Paste your Anthropic API key here for live AI responses
-
-    if (!API_KEY) throw new Error('No API key set');
-
-    const systemPrompt = `You are a helpful, friendly customer support assistant for the Meru County Revenue Board (MCRB) in Kenya.
-You help residents, traders, and businesses with questions about:
-- Single Business Permits (SBP) — due Dec 31, fees based on sector/size/zone, paid via M-Pesa Paybill 440112
-- Land rates — due March 31, 1% monthly penalty, waiver periods announced periodically
-- Agricultural produce cess — on Miraa, Tea, Coffee, Avocado etc, via cashless weighbridges
-- Parking fees — Motorbike KES 20/day, Car/Taxi KES 50/day, Matatu KES 100/day, Bus KES 200/day, Lorry KES 250/day, Trailer KES 300/day (uniform county-wide, Finance Act 2019 S.3). Monthly seasonal tickets available. Un-designated parking = KES 10,000 fine. Dial *412#
-- Market fees, outdoor advertising, slaughter fees, house rent, way leave charges
-- Payment methods: M-Pesa Paybill 440112, USSD *412#, self-service portal
-- Contact: Mt Kenya House, Makutano Junction, Meru Town. info@merurevenue.go.ke
-- Revenue performance: KES 1.15B collected 2024-25, target KES 2B
-- 100% cashless — no cash accepted at offices
-Keep answers concise (3–5 sentences max), warm, and in plain language. If unsure, direct them to info@merurevenue.go.ke.`;
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 300,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userMsg }]
-      })
-    });
-
-    if (!response.ok) throw new Error('API call failed');
-    const data = await response.json();
-    return data.content[0].text;
-  }
-
-  function keywordFallback(userMsg) {
-    const query = userMsg.toLowerCase();
-    if (query.includes('hello') || query.includes('hi ') || query.includes('hey')) {
-      return "Hello! I'm your Meru County Revenue Board assistant. How can I help you with your tax, land rates, or permit enquiries today?";
-    } else if (query.includes('paybill') || query.includes('how to pay') || query.includes('payment')) {
-      return "You can pay via M-Pesa Paybill <strong>440112</strong> or by dialing <strong>*412#</strong>. Online, use the MeruPay Portal on this site. All payments are cashless — no cash accepted at county offices.";
-    } else if (query.includes('permit') || query.includes('sbp') || query.includes('license') || query.includes('business')) {
-      return "All businesses in Meru County must renew their Single Business Permit (SBP) annually by <strong>December 31st</strong>. Use the Fee Calculator tab to estimate your cost, then pay via MeruPay.";
-    } else if (query.includes('land') || query.includes('rates') || query.includes('plot')) {
-      return "Land rates are due by <strong>March 31st</strong> every year. Arrears attract 1% monthly interest. Search your plot number on the Self-Service Portal tab to see your outstanding balance and pay.";
-    } else if (query.includes('parking')) {
-      return "Daily parking fees (county-wide): Motorbike <strong>KES 20</strong>, Saloon Car/Taxi <strong>KES 50</strong>, Matatu <strong>KES 100</strong>, Bus <strong>KES 200</strong>, Lorry <strong>KES 250</strong>, Trailer <strong>KES 300</strong>. Monthly seasonal tickets also available. Pay via <strong>*412#</strong> or MeruPay Portal. Note: un-designated parking attracts a <strong>KES 10,000 fine</strong>. (Source: Finance Act 2019, Section 3)";
-    } else if (query.includes('cess') || query.includes('miraa') || query.includes('tea') || query.includes('produce')) {
-      return "Agricultural produce cess is levied on goods like Miraa, Tea, Coffee, and Avocado moving through county borders, collected cashlessly at weighbridges under the Agricultural Produce Act.";
-    } else if (query.includes('contact') || query.includes('phone') || query.includes('email') || query.includes('where')) {
-      return "📍 Mt Kenya House, Makutano Junction, Meru Town.<br>📞 +254 700 000 000<br>✉️ info@merurevenue.go.ke<br>🕒 Mon–Fri, 8:00 AM – 5:00 PM";
-    } else if (query.includes('waiver') || query.includes('penalty') || query.includes('arrears')) {
-      return "The County Government occasionally announces penalty waivers on land rates and permit arrears. Watch the Announcements section on the Home page for current waiver windows. Outside waiver periods, penalties continue to accrue.";
-    } else if (query.includes('receipt') || query.includes('proof')) {
-      return "After payment, a digital receipt is generated instantly on screen which you can print or download. You also receive an SMS confirmation. Keep your M-Pesa transaction code as backup proof.";
-    } else {
-      return "I couldn't fully understand that, but our team is happy to help! Reach us at <strong>info@merurevenue.go.ke</strong> or visit Mt Kenya House, Makutano, Meru Town — open Mon–Fri, 8AM–5PM.";
+    function keywordFallback(userMsg) {
+      const query = userMsg.toLowerCase();
+      if (query.includes('hello') || query.includes('hi ') || query.includes('hey')) {
+        return "Hello! I'm your Meru County Revenue Board assistant. How can I help you with your tax, land rates, or permit enquiries today?";
+      } else if (query.includes('paybill') || query.includes('how to pay') || query.includes('payment')) {
+        return "You can pay via M-Pesa Paybill <strong>440112</strong> or by dialing <strong>*412#</strong>. Online, use the MeruPay Portal on this site. All payments are cashless — no cash accepted at county offices.";
+      } else if (query.includes('permit') || query.includes('sbp') || query.includes('license') || query.includes('business')) {
+        return "All businesses in Meru County must renew their Single Business Permit (SBP) annually by <strong>December 31st</strong>. Use the Fee Calculator tab to estimate your cost, then pay via MeruPay.";
+      } else if (query.includes('land') || query.includes('rates') || query.includes('plot')) {
+        return "Land rates are due by <strong>March 31st</strong> every year. Arrears attract 1% monthly interest. Search your plot number on the Self-Service Portal tab to see your outstanding balance and pay.";
+      } else if (query.includes('parking')) {
+        return "Daily parking fees (county-wide): Motorbike <strong>KES 20</strong>, Saloon Car/Taxi <strong>KES 50</strong>, Matatu <strong>KES 100</strong>, Bus <strong>KES 200</strong>, Lorry <strong>KES 250</strong>, Trailer <strong>KES 300</strong>. Monthly seasonal tickets also available. Pay via <strong>*412#</strong> or MeruPay Portal.";
+      } else if (query.includes('contact') || query.includes('phone') || query.includes('email') || query.includes('where')) {
+        return "📍 Mt Kenya House, Makutano Junction, Meru Town.<br>📞 +254 700 000 000<br>✉️ info@merurevenue.go.ke<br>🕒 Mon–Fri, 8:00 AM – 5:00 PM";
+      } else {
+        return "I couldn't fully understand that, but our team is happy to help! Reach us at <strong>info@merurevenue.go.ke</strong> or visit Mt Kenya House, Makutano, Meru Town — open Mon–Fri, 8AM–5PM.";
+      }
     }
   }
 });
-
-/* ==================== ACCESSIBILITY WIDGET ==================== */
-document.addEventListener("DOMContentLoaded", () => {
-  const fab = document.getElementById("accessibility-fab");
-  const panel = document.getElementById("accessibility-menu");
-  const closeBtn = document.getElementById("accessibility-close");
-  const btnContrast = document.getElementById("a11y-contrast");
-  const btnIncrease = document.getElementById("a11y-font-increase");
-  const btnDecrease = document.getElementById("a11y-font-decrease");
-  const btnLinks = document.getElementById("a11y-links");
-  const btnReset = document.getElementById("a11y-reset");
-  const fontValueLabel = document.getElementById("a11y-font-value");
-
-  if (!fab || !panel) return;
-
-  let currentFontSize = 100;
-
-  const togglePanel = () => {
-    const isOpen = panel.classList.toggle("active");
-    panel.setAttribute("aria-hidden", !isOpen);
-    fab.setAttribute("aria-expanded", isOpen);
-  };
-
-  fab.addEventListener("click", togglePanel);
-  if (closeBtn) closeBtn.addEventListener("click", togglePanel);
-
-  // High Contrast toggle
-  if (btnContrast) {
-    btnContrast.addEventListener("click", () => {
-      const isActive = document.body.classList.toggle("a11y-high-contrast");
-      btnContrast.setAttribute("data-active", isActive);
-    });
-  }
-
-  // Text Size
-  const applyFontSize = () => {
-    document.documentElement.style.fontSize = `${currentFontSize}%`;
-    if (fontValueLabel) fontValueLabel.textContent = `${currentFontSize}%`;
-  };
-
-  if (btnIncrease) {
-    btnIncrease.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (currentFontSize < 150) { currentFontSize += 10; applyFontSize(); }
-    });
-  }
-
-  if (btnDecrease) {
-    btnDecrease.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (currentFontSize > 80) { currentFontSize -= 10; applyFontSize(); }
-    });
-  }
-
-  // Highlight Links toggle
-  if (btnLinks) {
-    btnLinks.addEventListener("click", () => {
-      const isActive = document.body.classList.toggle("a11y-links-highlighted");
-      btnLinks.setAttribute("data-active", isActive);
-    });
-  }
-
-  // Reset all settings
-  if (btnReset) {
-    btnReset.addEventListener("click", () => {
-      document.body.classList.remove("a11y-high-contrast", "a11y-links-highlighted");
-      currentFontSize = 100;
-      applyFontSize();
-      if (btnContrast) btnContrast.setAttribute("data-active", "false");
-      if (btnLinks) btnLinks.setAttribute("data-active", "false");
-    });
-  }
-
-  // Close panel when clicking outside
-  document.addEventListener("click", (e) => {
-    if (panel.classList.contains("active") && !panel.contains(e.target) && !fab.contains(e.target)) {
-      togglePanel();
-    }
-  });
-});
-
