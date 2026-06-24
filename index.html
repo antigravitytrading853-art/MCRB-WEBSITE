@@ -95,6 +95,25 @@
       color: white;
     }
 
+    .services-page-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin: 1.25rem 0 1.75rem;
+    }
+
+    .services-page-nav .btn-view-category {
+      width: auto;
+      padding: 0.7rem 1rem;
+      margin-top: 0;
+    }
+
+    .welcome-heading {
+      font-size: 2rem;
+      line-height: 1.2;
+      margin-bottom: 0.25rem;
+    }
+
     /* Portal styles */
     .portal-bill-preview {
       background: var(--bg-card);
@@ -154,6 +173,11 @@
         </div>
       </div>
       
+      <div class="family-tree-switcher" id="family-tree-switcher" hidden>
+        <button class="family-tree-switcher-btn" id="family-tree-switcher-btn" type="button">🌳 Family Trees</button>
+        <div class="family-tree-switcher-menu" id="family-tree-switcher-menu"></div>
+      </div>
+
       <!-- Auth Buttons -->
       <div class="auth-buttons">
         <button class="btn-login" data-tab="login">Sign In</button>
@@ -259,6 +283,49 @@
 
   <!-- ==================== HOME VIEW ==================== -->
   <div id="home-view" class="tab-content active container">
+    <section class="family-folder" aria-label="Family statistics overview">
+      <button class="family-folder-toggle" type="button" id="family-folder-toggle" aria-expanded="false" aria-controls="family-statistics-panel">
+        <span class="family-folder-title">📁 Family Statistics Panel</span>
+        <span class="family-folder-icon">▸</span>
+      </button>
+      <div class="family-stats-panel" id="family-statistics-panel" hidden>
+        <div class="section-header">
+          <span class="section-tag">Family Statistics Panel</span>
+          <h2>Family Overview Before You Enter the Tree</h2>
+          <p>A quick snapshot of the family network, heritage, and generational spread.</p>
+        </div>
+        <div class="family-stats-actions">
+          <button class="family-link-member-btn" id="link-member-btn" type="button">+ Link a new member</button>
+        </div>
+        <div class="family-stats-grid">
+          <div class="family-stat-card">
+            <span class="family-stat-label">Total individuals</span>
+            <strong class="family-stat-value" data-stat="totalIndividuals">0</strong>
+          </div>
+          <div class="family-stat-card">
+            <span class="family-stat-label">Total families</span>
+            <strong class="family-stat-value" data-stat="totalFamilies">0</strong>
+          </div>
+          <div class="family-stat-card">
+            <span class="family-stat-label">Earliest recorded ancestor</span>
+            <strong class="family-stat-value family-stat-text" data-stat="earliestRecordedAncestor">—</strong>
+          </div>
+          <div class="family-stat-card">
+            <span class="family-stat-label">Living vs deceased members</span>
+            <strong class="family-stat-value family-stat-text" data-stat="livingDeceasedMembers">0 / 0</strong>
+          </div>
+          <div class="family-stat-card">
+            <span class="family-stat-label">Male / Female distribution</span>
+            <strong class="family-stat-value family-stat-text" data-stat="maleFemaleDistribution">0 / 0</strong>
+          </div>
+          <div class="family-stat-card">
+            <span class="family-stat-label">Number of generations</span>
+            <strong class="family-stat-value" data-stat="generations">0</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- How It Works Section -->
     <div class="how-it-works-section">
       <div class="section-header">
@@ -349,6 +416,17 @@
       <span class="section-tag">Our Services</span>
       <h2>County Revenue Services</h2>
       <p>Select a category below to view all available services and their fees from the Meru County Finance Act 2019</p>
+    </div>
+
+    <div class="services-page-nav">
+      <button class="btn-view-category" data-category="business">🏢 Business & Trade</button>
+      <button class="btn-view-category" data-category="transport">🚗 Transport & Parking</button>
+      <button class="btn-view-category" data-category="land">🌍 Land & Property</button>
+      <button class="btn-view-category" data-category="health">🏥 Health & Licensing</button>
+      <button class="btn-view-category" data-category="agriculture">🌾 Agriculture & Cess</button>
+      <button class="btn-view-category" data-category="construction">🏗️ Construction & Building</button>
+      <button class="btn-view-category" data-category="alcohol">🍺 Alcohol Licenses</button>
+      <button class="btn-view-category" data-category="waste">🗑️ Waste Management</button>
     </div>
 
     <!-- 8 Category Cards with Images and Definitions -->
@@ -1003,7 +1081,7 @@
       <div class="login-form-panel">
         <div class="login-form-card-wrap">
           <div class="login-form-header">
-            <h3>Welcome Back</h3>
+            <h3 class="welcome-heading">Welcome Back</h3>
             <p>Sign in to continue to your MeruPay account</p>
           </div>
           <div class="login-tabs">

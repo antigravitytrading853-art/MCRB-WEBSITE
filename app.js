@@ -9,6 +9,278 @@ document.addEventListener('DOMContentLoaded', function() {
   // Store current payment data
   let currentPaymentItem = null;
   let currentPaymentName = null;
+
+  function getFamilyTrees() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem('familyTrees') || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.warn('Unable to read family trees.', error);
+      return [];
+    }
+  }
+
+  function saveFamilyTrees(trees) {
+    try {
+      localStorage.setItem('familyTrees', JSON.stringify(trees));
+    } catch (error) {
+      console.warn('Unable to save family trees.', error);
+    }
+  }
+
+  function getActiveFamilyTree() {
+    return localStorage.getItem('activeFamilyTree') || '';
+  }
+
+  function getFamilyMembers() {
+    try {
+      const stored = JSON.parse(localStorage.getItem('familyMembers') || 'null');
+      if (Array.isArray(stored) && stored.length > 0) {
+        return stored;
+      }
+    } catch (error) {
+      console.warn('Unable to load family members.', error);
+    }
+
+    const sampleMembers = [
+      { id: 1, name: 'Nellie Mwangi', linkedTo: '', relationship: 'ancestor', status: 'deceased', gender: 'female' },
+      { id: 2, name: 'James Mwangi', linkedTo: 'Nellie Mwangi', relationship: 'child', status: 'deceased', gender: 'male' },
+      { id: 3, name: 'Grace Mwangi', linkedTo: 'James Mwangi', relationship: 'child', status: 'living', gender: 'female' },
+      { id: 4, name: 'Peter Mwangi', linkedTo: 'Grace Mwangi', relationship: 'child', status: 'living', gender: 'male' },
+      { id: 5, name: 'Mary Mwangi', linkedTo: 'James Mwangi', relationship: 'child', status: 'living', gender: 'female' }
+    ];
+    localStorage.setItem('familyMembers', JSON.stringify(sampleMembers));
+    return sampleMembers;
+  }
+
+  function saveFamilyMembers(members) {
+    try {
+      localStorage.setItem('familyMembers', JSON.stringify(members));
+    } catch (error) {
+      console.warn('Unable to save family members.', error);
+    }
+  }
+
+  function getFamilyStatistics() {
+    const members = getFamilyMembers();
+    const livingMembers = members.filter(member => member.status === 'living').length;
+    const deceasedMembers = members.length - livingMembers;
+    const maleMembers = members.filter(member => member.gender === 'male').length;
+    const femaleMembers = members.filter(member => member.gender === 'female').length;
+
+    const generations = Math.max(1, new Set(members.map(member => member.linkedTo || 'root')).size);
+    const earliestAncestor = members.find(member => member.relationship === 'ancestor')?.name || 'Not recorded yet';
+
+    return {
+      totalIndividuals: members.length,
+      totalFamilies: Math.max(1, Math.ceil(members.length / 5)),
+      earliestRecordedAncestor: earliestAncestor,
+      livingMembers,
+      deceasedMembers,
+      maleMembers,
+      femaleMembers,
+      generations
+    };
+  }
+
+  function renderFamilyStatisticsPanel() {
+    const panel = document.getElementById('family-statistics-panel');
+    if (!panel) return;
+
+    const stats = getFamilyStatistics();
+    const totalIndividuals = panel.querySelector('[data-stat="totalIndividuals"]');
+    const totalFamilies = panel.querySelector('[data-stat="totalFamilies"]');
+    const earliestRecordedAncestor = panel.querySelector('[data-stat="earliestRecordedAncestor"]');
+    const livingDeceasedMembers = panel.querySelector('[data-stat="livingDeceasedMembers"]');
+    const maleFemaleDistribution = panel.querySelector('[data-stat="maleFemaleDistribution"]');
+    const generations = panel.querySelector('[data-stat="generations"]');
+
+    if (totalIndividuals) totalIndividuals.textContent = stats.totalIndividuals;
+    if (totalFamilies) totalFamilies.textContent = stats.totalFamilies;
+    if (earliestRecordedAncestor) earliestRecordedAncestor.textContent = stats.earliestRecordedAncestor;
+    if (livingDeceasedMembers) livingDeceasedMembers.textContent = `${stats.livingMembers} / ${stats.deceasedMembers}`;
+    if (maleFemaleDistribution) maleFemaleDistribution.textContent = `${stats.maleMembers} / ${stats.femaleMembers}`;
+    if (generations) generations.textContent = stats.generations;
+  }
+
+  function openLinkFamilyMemberModal() {
+    const existingModal = document.querySelector('.family-member-link-modal');
+    if (existingModal) existingModal.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'family-member-link-modal';
+    overlay.innerHTML = `
+      <div class="family-member-link-card" role="dialog" aria-modal="true" aria-labelledby="family-member-link-title">
+        <h3 id="family-member-link-title">Link a new member</h3>
+        <p>Attach a new family member to someone already in the tree.</p>
+        <form id="family-member-link-form">
+          <label>
+            New member name
+            <input type="text" name="memberName" required placeholder="e.g. Amina Mwangi">
+          </label>
+          <label>
+            Link to existing person
+            <select name="linkedTo" required>
+              <option value="">Select someone on the tree</option>
+            </select>
+          </label>
+          <label>
+            Relationship
+            <select name="relationship">
+              <option value="child">Child</option>
+              <option value="spouse">Spouse</option>
+              <option value="parent">Parent</option>
+              <option value="sibling">Sibling</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <div class="family-member-link-row">
+            <label>
+              Status
+              <select name="status">
+                <option value="living">Living</option>
+                <option value="deceased">Deceased</option>
+              </select>
+            </label>
+            <label>
+              Gender
+              <select name="gender">
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+          </div>
+          <div class="family-member-link-actions">
+            <button type="button" class="family-member-link-cancel">Cancel</button>
+            <button type="submit" class="family-member-link-submit">Save link</button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const members = getFamilyMembers();
+    const select = overlay.querySelector('select[name="linkedTo"]');
+    members.forEach(member => {
+      const option = document.createElement('option');
+      option.value = member.name;
+      option.textContent = member.name;
+      select.appendChild(option);
+    });
+
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) overlay.remove();
+    });
+
+    overlay.querySelector('.family-member-link-cancel').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#family-member-link-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const formData = new FormData(event.target);
+      const newMember = {
+        id: Date.now(),
+        name: formData.get('memberName').toString().trim(),
+        linkedTo: formData.get('linkedTo').toString().trim(),
+        relationship: formData.get('relationship').toString(),
+        status: formData.get('status').toString(),
+        gender: formData.get('gender').toString()
+      };
+
+      if (!newMember.name || !newMember.linkedTo) {
+        alert('Please enter a name and choose the person to link to.');
+        return;
+      }
+
+      const membersList = getFamilyMembers();
+      membersList.push(newMember);
+      saveFamilyMembers(membersList);
+      renderFamilyStatisticsPanel();
+      overlay.remove();
+      alert(`Linked ${newMember.name} to ${newMember.linkedTo}.`);
+    });
+  }
+
+  function setActiveFamilyTree(treeName) {
+    const cleanName = (treeName || '').trim();
+    if (!cleanName) return;
+    localStorage.setItem('activeFamilyTree', cleanName);
+    renderFamilyTreeSwitcher();
+  }
+
+  function addFamilyTree(treeName) {
+    const cleanName = (treeName || '').trim();
+    if (!cleanName) return null;
+    const trees = getFamilyTrees();
+    if (!trees.some(tree => tree.toLowerCase() === cleanName.toLowerCase())) {
+      trees.push(cleanName);
+      saveFamilyTrees(trees);
+    }
+    setActiveFamilyTree(cleanName);
+    return cleanName;
+  }
+
+  function renderFamilyTreeSwitcher() {
+    const switcher = document.getElementById('family-tree-switcher');
+    const button = document.getElementById('family-tree-switcher-btn');
+    const menu = document.getElementById('family-tree-switcher-menu');
+    if (!switcher || !button || !menu) return;
+
+    const trees = getFamilyTrees();
+    const activeTree = getActiveFamilyTree() || trees[0] || '';
+
+    if (!isAuthenticated || trees.length === 0) {
+      switcher.hidden = true;
+      return;
+    }
+
+    switcher.hidden = false;
+    button.textContent = `🌳 ${activeTree}`;
+    menu.innerHTML = trees.map(tree => `
+      <button type="button" class="family-tree-switcher-item ${tree === activeTree ? 'active' : ''}" data-tree="${tree}">
+        <span>${tree}</span>
+        ${tree === activeTree ? '<strong>Active</strong>' : ''}
+      </button>
+    `).join('') + `
+      <button type="button" class="family-tree-switcher-item add" data-action="add-tree">
+        + Add another family tree
+      </button>
+    `;
+  }
+
+  function bindFamilyTreeSwitcherEvents() {
+    const button = document.getElementById('family-tree-switcher-btn');
+    const menu = document.getElementById('family-tree-switcher-menu');
+    if (!button || !menu) return;
+
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      menu.classList.toggle('open');
+    });
+
+    menu.addEventListener('click', (event) => {
+      const item = event.target.closest('.family-tree-switcher-item');
+      if (!item) return;
+
+      if (item.dataset.action === 'add-tree') {
+        const addedTree = window.prompt('Add another family tree name:');
+        if (addedTree && addedTree.trim()) {
+          addFamilyTree(addedTree);
+        }
+        menu.classList.remove('open');
+        return;
+      }
+
+      const treeName = item.dataset.tree;
+      if (treeName) {
+        setActiveFamilyTree(treeName);
+        menu.classList.remove('open');
+      }
+    });
+
+    document.addEventListener('click', () => {
+      menu.classList.remove('open');
+    });
+  }
   
   // --- MOCK DATABASE FOR PORTAL ---
   const mockBills = {
@@ -1065,6 +1337,26 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!clickedInside) closeDropdown();
   });
 
+  const familyFolderToggle = document.getElementById('family-folder-toggle');
+  const familyStatisticsPanel = document.getElementById('family-statistics-panel');
+  const linkMemberBtn = document.getElementById('link-member-btn');
+  if (familyFolderToggle && familyStatisticsPanel) {
+    familyFolderToggle.addEventListener('click', () => {
+      const isExpanded = familyFolderToggle.getAttribute('aria-expanded') === 'true';
+      familyFolderToggle.setAttribute('aria-expanded', String(!isExpanded));
+      familyStatisticsPanel.hidden = isExpanded;
+      familyFolderToggle.querySelector('.family-folder-icon').textContent = isExpanded ? '▸' : '▾';
+    });
+  }
+
+  if (linkMemberBtn) {
+    linkMemberBtn.addEventListener('click', openLinkFamilyMemberModal);
+  }
+
+  bindFamilyTreeSwitcherEvents();
+  renderFamilyTreeSwitcher();
+  renderFamilyStatisticsPanel();
+
   const signInBtn = document.querySelector('.btn-login');
   const registerBtn = document.querySelector('.btn-register');
 
@@ -1099,6 +1391,60 @@ document.addEventListener('DOMContentLoaded', function() {
       localStorage.setItem('theme', currentTheme);
       updateThemeIcon();
     });
+  }
+
+  function showFamilyTreeSetupChoice(onComplete = () => {}) {
+    const existingModal = document.querySelector('.family-tree-setup-modal');
+    if (existingModal) existingModal.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'family-tree-setup-modal';
+    overlay.innerHTML = `
+      <div class="family-tree-setup-card" role="dialog" aria-modal="true" aria-labelledby="family-tree-setup-title">
+        <h3 id="family-tree-setup-title">Welcome to your family space</h3>
+        <p>Choose how you would like to begin your family journey.</p>
+        <div class="family-tree-option-grid">
+          <button type="button" class="family-tree-option-card" data-action="join">
+            <strong>Join a family tree</strong>
+            <span>Connect to an existing family tree using a family name or invitation code.</span>
+          </button>
+          <button type="button" class="family-tree-option-card" data-action="create">
+            <strong>Create a new family tree</strong>
+            <span>Start a fresh tree and invite your loved ones to contribute.</span>
+          </button>
+        </div>
+        <button type="button" class="family-tree-skip-btn">Skip for now</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const closeModal = (action) => {
+      overlay.remove();
+      if (action) {
+        const promptText = action === 'join'
+          ? 'Enter the family name or invitation code you would like to join:'
+          : 'What would you like to name your new family tree?';
+        const submittedName = window.prompt(promptText);
+        if (submittedName && submittedName.trim()) {
+          try {
+            localStorage.setItem('familyTreeSetupAction', action);
+            localStorage.setItem('familyTreeSetupName', submittedName.trim());
+            addFamilyTree(submittedName.trim());
+          } catch (error) {
+            console.warn('Unable to persist family tree setup choice.', error);
+          }
+        }
+      }
+      onComplete();
+    };
+
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) closeModal();
+    });
+
+    overlay.querySelector('[data-action="join"]').addEventListener('click', () => closeModal('join'));
+    overlay.querySelector('[data-action="create"]').addEventListener('click', () => closeModal('create'));
+    overlay.querySelector('.family-tree-skip-btn').addEventListener('click', () => closeModal());
   }
 
   const loginTabBtns = document.querySelectorAll('.login-tab-btn');
@@ -1141,8 +1487,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const pwdInput = form.querySelector('input[type="password"]');
         if (idInput && pwdInput && idInput.value.trim() !== '' && pwdInput.value.trim() !== '') {
           isAuthenticated = true;
-          alert('Login successful. You may now access MeruPay services.');
-          switchView('home');
+          renderFamilyTreeSwitcher();
+          showFamilyTreeSetupChoice(() => {
+            switchView('home');
+          });
         } else {
           alert('Please enter both your ID and password to sign in.');
         }
@@ -1159,8 +1507,10 @@ document.addEventListener('DOMContentLoaded', function() {
           const regPassword = document.getElementById('regPassword');
           if (regId && regPhone && regPassword && regId.value.trim() !== '' && regPhone.value.trim() !== '' && regPassword.value.trim() !== '') {
             isAuthenticated = true;
-            alert('Registration complete. You are now signed in and can access services.');
-            switchView('home');
+            renderFamilyTreeSwitcher();
+            showFamilyTreeSetupChoice(() => {
+              switchView('home');
+            });
           } else {
             alert('Please complete all registration fields before continuing.');
           }
